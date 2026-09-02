@@ -23,6 +23,7 @@ blcvoice-audio = { path = "../../../crates/blcvoice-audio" }
 blcvoice-audio-cpal = { path = "../../../crates/blcvoice-audio-cpal" }
 blcvoice-core = { path = "../../../crates/blcvoice-core" }
 blcvoice-runtime = { path = "../../../crates/blcvoice-runtime" }
+blcvoice-shortcuts = { path = "../../../crates/blcvoice-shortcuts" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 
