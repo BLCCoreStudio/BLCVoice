@@ -19,6 +19,7 @@ For the initial implementation:
 - allocate the complete queue before the stream starts;
 - normalize PCM sample representation to interleaved `f32` inside the callback;
 - preserve the device-native channel count and sample rate;
+- treat an interleaved audio frame as an indivisible unit across queue capacity, overflow and consumer reads;
 - defer downmixing, resampling, VAD and ASR to downstream workers;
 - never block or wait for free queue capacity in the data callback;
 - when the queue is full, retain the samples that fit, drop only the remainder, and increment an explicit dropped-sample counter;
@@ -36,7 +37,7 @@ The default handoff capacity is one second of device-native interleaved samples.
 
 Overflow is observable data loss, not backpressure.
 
-Blocking the audio callback until the consumer catches up risks xruns, capture stalls and platform-specific instability. BLCVoice therefore records `received_samples` and `dropped_samples` so diagnostics and later recovery policy can distinguish a clean capture from an overloaded pipeline.
+Blocking the audio callback until the consumer catches up risks xruns, capture stalls and platform-specific instability. BLCVoice therefore records `received_samples` and `dropped_samples` so diagnostics and later recovery policy can distinguish a clean capture from an overloaded pipeline. For multi-channel PCM, overflow may only commit complete interleaved frames; a partial frame is dropped rather than shifting channel alignment for all later audio.
 
 A non-zero dropped-sample count must never be reported as a fully healthy recording session.
 

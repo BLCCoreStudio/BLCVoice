@@ -217,10 +217,12 @@ impl CaptureBufferConfig {
             return Err(InvalidCaptureBufferConfig);
         }
 
-        let samples = u64::from(stream.sample_rate_hz)
-            .checked_mul(u64::from(stream.channels))
-            .and_then(|value| value.checked_mul(u64::from(self.capacity_ms)))
+        let frames = u64::from(stream.sample_rate_hz)
+            .checked_mul(u64::from(self.capacity_ms))
             .map(|value| value.div_ceil(1_000))
+            .ok_or(InvalidCaptureBufferConfig)?;
+        let samples = frames
+            .checked_mul(u64::from(stream.channels))
             .ok_or(InvalidCaptureBufferConfig)?;
 
         usize::try_from(samples).map_err(|_| InvalidCaptureBufferConfig)
@@ -353,6 +355,18 @@ mod tests {
         let buffer = CaptureBufferConfig::new(1_000).expect("valid buffer");
 
         assert_eq!(buffer.capacity_samples(&stream), Ok(96_000));
+    }
+
+    #[test]
+    fn capture_buffer_rounds_up_to_complete_interleaved_frames() {
+        let stream = AudioStreamConfig {
+            channels: 2,
+            sample_rate_hz: 44_100,
+            sample_format: AudioSampleFormat::F32,
+        };
+        let buffer = CaptureBufferConfig::new(1).expect("valid buffer");
+
+        assert_eq!(buffer.capacity_samples(&stream), Ok(90));
     }
 
     #[test]
