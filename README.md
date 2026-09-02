@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter and runtime-level capture-to-ASR orchestration. The desktop host is beginning to wire those pieces together with a native microphone-test path. Model management, global shortcuts, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter and runtime-level capture-to-ASR orchestration. The desktop host now exposes native microphone discovery and a bounded capture-test UI that reports stream integrity without sending raw PCM through the webview. Model management, global shortcuts, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
 
 ## Product principles
 
@@ -46,7 +46,7 @@ cargo test -p blcvoice-core -p blcvoice-runtime --all-targets
 cargo run -p blcvoice-desktop
 ```
 
-CI validates the runtime-independent core on Linux, Windows and macOS, validates native audio and ASR adapters on all three platforms, and tests/lints the desktop shell on Linux.
+CI validates the runtime-independent core on Linux, Windows and macOS, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux.
 
 ## Contributing
 
