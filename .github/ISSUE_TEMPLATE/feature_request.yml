@@ -1,0 +1,67 @@
+name: Feature request
+description: Propose a focused improvement to BLCVoice
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        BLCVoice is deliberately prioritizing the universal dictation path before expanding feature count. Explain the user problem first; implementation ideas are secondary.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem or workflow limitation does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should the user be able to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Audio capture
+        - Speech recognition
+        - Text insertion
+        - Platform compatibility
+        - User interface
+        - Diagnostics
+        - History
+        - Integration
+        - Performance
+        - Privacy / security
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workflow, workaround or competing approach, if known.
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Platform, privacy or permission impact
+      description: Note any new OS permissions, network access, stored data or platform-specific behavior.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for similar proposals.
+          required: true
+        - label: This request describes a user problem rather than only asking to copy a competitor feature.
+          required: true
