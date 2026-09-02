@@ -19,7 +19,11 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+blcvoice-audio = { path = "../../../crates/blcvoice-audio" }
+blcvoice-audio-cpal = { path = "../../../crates/blcvoice-audio-cpal" }
 blcvoice-core = { path = "../../../crates/blcvoice-core" }
+blcvoice-runtime = { path = "../../../crates/blcvoice-runtime" }
+serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 
 [lints]

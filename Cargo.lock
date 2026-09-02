@@ -256,7 +256,11 @@ version = "0.1.0"
 name = "blcvoice-desktop"
 version = "0.1.0"
 dependencies = [
+ "blcvoice-audio",
+ "blcvoice-audio-cpal",
  "blcvoice-core",
+ "blcvoice-runtime",
+ "serde",
  "tauri",
  "tauri-build",
 ]
