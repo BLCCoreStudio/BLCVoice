@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Global-shortcut semantics, capability-driven backend resolution and desktop registration infrastructure are implemented: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal. Shortcut events are normalized through the shared controller and emitted as typed start/stop dictation decisions; they are not yet connected to a production dictation session. Model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Global-shortcut semantics, capability-driven backend resolution and desktop registration infrastructure are implemented: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal. A production desktop dictation service now prepares the local recognizer before recording, shares the same exclusive capture lifecycle as microphone testing, finalizes captured audio, preprocesses it to the recognizer's required format and produces a transcript that stops truthfully at the pending text-insertion stage. Shortcut decisions are not yet wired into this service because text insertion is still missing. Model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
 
 ## Product principles
 
@@ -46,7 +46,7 @@ cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-shortcuts --all-targ
 cargo run -p blcvoice-desktop
 ```
 
-CI validates the runtime-independent core on Linux, Windows and macOS, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux.
+CI validates the runtime-independent core on Linux, Windows and macOS, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux, Windows and macOS.
 
 ## Contributing
 
