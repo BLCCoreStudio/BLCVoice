@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem in BLCVoice
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve BLCVoice. Do not include secrets, private transcripts or sensitive audio. Security-sensitive reports should follow SECURITY.md instead of using a public issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release version or commit SHA where the problem occurs.
+      placeholder: v0.x.x or commit SHA
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux - KDE Wayland
+        - Linux - GNOME Wayland
+        - Linux - other Wayland compositor
+        - Linux - X11
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment details
+      description: OS version, desktop environment/compositor, relevant hardware and target application when applicable.
+      placeholder: "Example: Windows 11 24H2, NVIDIA RTX ..., VS Code ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable reproduction you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics or logs
+      description: Remove transcripts, secrets, usernames, paths or other personal data before posting.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed sensitive information from logs and diagnostics.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true
