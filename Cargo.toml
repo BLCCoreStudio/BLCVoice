@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "crates/blcvoice-core",
+  "crates/blcvoice-audio",
+  "crates/blcvoice-audio-cpal",
   "apps/desktop/src-tauri",
 ]
 

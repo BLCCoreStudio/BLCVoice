@@ -14,6 +14,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lockfile:
+    name: Cargo lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - name: Validate committed dependency graph
+        run: cargo +1.98.0 metadata --locked --no-deps --format-version 1 > /dev/null
+
   core:
     name: Core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -26,7 +39,7 @@ jobs:
           - macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install Rust toolchain
@@ -39,22 +52,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
       - name: Check formatting
         run: cargo +1.98.0 fmt --all -- --check
-      - name: Run Clippy on the core
-        run: cargo +1.98.0 clippy --locked -p blcvoice-core --all-targets -- -D warnings
+      - name: Run Clippy on runtime-independent crates
+        run: cargo +1.98.0 clippy --locked -p blcvoice-core -p blcvoice-audio --all-targets -- -D warnings
+
+  audio:
+    name: Audio backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-latest
+          - macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Linux audio prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libpulse-dev
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy
+      - name: Test audio crates
+        run: cargo +1.98.0 test --locked -p blcvoice-audio -p blcvoice-audio-cpal --all-targets
+      - name: Lint audio crates
+        run: cargo +1.98.0 clippy --locked -p blcvoice-audio -p blcvoice-audio-cpal --all-targets -- -D warnings
 
   desktop-linux:
     name: Desktop shell (Linux)
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install Tauri Linux prerequisites
@@ -74,16 +117,3 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Check desktop shell
         run: cargo +1.98.0 check --locked -p blcvoice-desktop --all-targets
-
-  lockfile:
-    name: Cargo lockfile
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - name: Install Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal
-      - name: Validate committed dependency graph
-        run: cargo +1.98.0 metadata --locked --no-deps --format-version 1 > /dev/null
