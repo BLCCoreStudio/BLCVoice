@@ -1,0 +1,33 @@
+# Temporary feature-branch helper. Removed before merge.
+name: Refresh production dictation lockfile
+
+on:
+  push:
+    branches:
+      - feat/production-dictation-service
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/production-dictation-service
+          persist-credentials: true
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - name: Regenerate lockfile
+        run: cargo +1.98.0 generate-lockfile
+      - name: Commit lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git diff --cached --quiet && exit 0
+          git commit -m "build: refresh Cargo lockfile for production dictation"
+          git push origin HEAD:feat/production-dictation-service
