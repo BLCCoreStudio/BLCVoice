@@ -154,14 +154,13 @@ impl InputCaptureFactory for CpalInputCaptureFactory {
         &self,
         request: &InputCaptureRequest,
     ) -> Result<Box<dyn InputCaptureSession>, AudioFailure> {
-        let cpal_device_id = cpal::DeviceId::from_str(request.device_id.as_str()).map_err(|error| {
-            AudioFailure {
+        let cpal_device_id =
+            cpal::DeviceId::from_str(request.device_id.as_str()).map_err(|error| AudioFailure {
                 backend: None,
                 device_id: Some(request.device_id.clone()),
                 kind: AudioFailureKind::InvalidInput,
                 message: format!("invalid audio device id: {error}"),
-            }
-        })?;
+            })?;
         let backend = AudioBackend::from_host_name(&cpal_device_id.host().to_string());
         let host = cpal::host_from_id(cpal_device_id.host()).map_err(|error| {
             failure(
@@ -170,12 +169,14 @@ impl InputCaptureFactory for CpalInputCaptureFactory {
                 &error,
             )
         })?;
-        let device = host.device_by_id(&cpal_device_id).ok_or_else(|| AudioFailure {
-            backend: Some(backend.clone()),
-            device_id: Some(request.device_id.clone()),
-            kind: AudioFailureKind::DeviceNotAvailable,
-            message: "selected input device is no longer available".to_owned(),
-        })?;
+        let device = host
+            .device_by_id(&cpal_device_id)
+            .ok_or_else(|| AudioFailure {
+                backend: Some(backend.clone()),
+                device_id: Some(request.device_id.clone()),
+                kind: AudioFailureKind::DeviceNotAvailable,
+                message: "selected input device is no longer available".to_owned(),
+            })?;
 
         let supported = device.default_input_config().map_err(|error| {
             failure(
@@ -349,11 +350,8 @@ fn ingest_data(data: &cpal::Data, producer: &mut Producer<f32>, metrics: &Captur
     }
 }
 
-fn ingest_typed<T>(
-    samples: Option<&[T]>,
-    producer: &mut Producer<f32>,
-    metrics: &CaptureMetrics,
-) where
+fn ingest_typed<T>(samples: Option<&[T]>, producer: &mut Producer<f32>, metrics: &CaptureMetrics)
+where
     T: Copy,
     f32: cpal::FromSample<T>,
 {
@@ -546,7 +544,11 @@ mod tests {
         let (mut producer, mut consumer) = RingBuffer::<f32>::new(3);
         let metrics = CaptureMetrics::default();
 
-        ingest_typed(Some(&[1.0_f32, 2.0, 3.0, 4.0, 5.0]), &mut producer, &metrics);
+        ingest_typed(
+            Some(&[1.0_f32, 2.0, 3.0, 4.0, 5.0]),
+            &mut producer,
+            &metrics,
+        );
 
         let mut output = [0.0_f32; 5];
         let read = {
