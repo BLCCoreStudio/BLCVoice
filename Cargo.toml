@@ -4,6 +4,7 @@ members = [
   "crates/blcvoice-core",
   "crates/blcvoice-audio",
   "crates/blcvoice-audio-cpal",
+  "crates/blcvoice-audio-processing",
   "apps/desktop/src-tauri",
 ]
 
