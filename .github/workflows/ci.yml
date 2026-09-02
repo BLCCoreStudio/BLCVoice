@@ -32,7 +32,7 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Test platform-independent core
-        run: cargo +1.98.0 test -p blcvoice-core --all-targets
+        run: cargo +1.98.0 test --locked -p blcvoice-core --all-targets
 
   quality:
     name: Rust quality
@@ -47,7 +47,7 @@ jobs:
       - name: Check formatting
         run: cargo +1.98.0 fmt --all -- --check
       - name: Run Clippy on the core
-        run: cargo +1.98.0 clippy -p blcvoice-core --all-targets -- -D warnings
+        run: cargo +1.98.0 clippy --locked -p blcvoice-core --all-targets -- -D warnings
 
   desktop-linux:
     name: Desktop shell (Linux)
@@ -73,45 +73,17 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Check desktop shell
-        run: cargo +1.98.0 check -p blcvoice-desktop --all-targets
+        run: cargo +1.98.0 check --locked -p blcvoice-desktop --all-targets
 
   lockfile:
-    name: Bootstrap Cargo lockfile
+    name: Cargo lockfile
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout source branch
+      - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+          persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
-      - name: Resolve dependency graph
-        run: cargo +1.98.0 generate-lockfile
-      - name: Validate resolved graph
+      - name: Validate committed dependency graph
         run: cargo +1.98.0 metadata --locked --no-deps --format-version 1 > /dev/null
-      - name: Detect lockfile change
-        id: lock
-        shell: bash
-        run: |
-          if git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1 && git diff --quiet -- Cargo.lock; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Commit initial lockfile to the PR branch
-        if: steps.lock.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "chore: lock Rust dependencies"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-      - name: Require a committed lockfile outside pull requests
-        if: steps.lock.outputs.changed == 'true' && github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          echo "Cargo.lock must be committed and up to date." >&2
-          exit 1
