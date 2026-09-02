@@ -127,7 +127,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Tauri Linux prerequisites
+      - name: Install Tauri and audio prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -139,8 +139,13 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libpulse-dev
       - name: Install Rust toolchain
-        run: rustup toolchain install 1.98.0 --profile minimal
-      - name: Check desktop shell
-        run: cargo +1.98.0 check --locked -p blcvoice-desktop --all-targets
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy
+      - name: Test desktop capture bridge
+        run: cargo +1.98.0 test --locked -p blcvoice-desktop --all-targets
+      - name: Lint desktop shell
+        run: cargo +1.98.0 clippy --locked -p blcvoice-desktop --all-targets -- -D warnings
