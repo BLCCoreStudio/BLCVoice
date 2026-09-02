@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter and runtime-level capture-to-ASR orchestration. The desktop host now exposes native microphone discovery and a bounded capture-test UI that reports stream integrity without sending raw PCM through the webview. Model management, global shortcuts, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Runtime-independent global-shortcut semantics are also defined and tested. Platform shortcut registration, model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
 
 ## Product principles
 
@@ -21,7 +21,7 @@ BLCVoice is in **pre-alpha development**. The repository now contains the Rust/T
 
 The first usable milestone is intentionally narrow:
 
-1. global push-to-talk,
+1. global toggle-to-talk by default, with optional push-to-talk,
 2. microphone selection and reliable audio capture,
 3. local speech recognition,
 4. automatic model/backend recommendation,
@@ -31,7 +31,7 @@ The first usable milestone is intentionally narrow:
 8. basic local history,
 9. diagnostics and actionable failure reporting.
 
-Deep integrations with tools such as Claude Code, Codex and VS Code are planned only after the universal dictation path is dependable.
+The default planned interaction is `Ctrl+Shift+Space`: press once to start dictation and press again to stop. Push-to-talk remains an optional mode for short utterances. Deep integrations with tools such as Claude Code, Codex and VS Code are planned only after the universal dictation path is dependable.
 
 ## Architecture
 
@@ -42,7 +42,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system boundaries and [do
 The current foundation pins Rust 1.98.0. On Linux, install the Tauri 2 and native audio system prerequisites for your distribution before building the desktop shell.
 
 ```bash
-cargo test -p blcvoice-core -p blcvoice-runtime --all-targets
+cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-shortcuts --all-targets
 cargo run -p blcvoice-desktop
 ```
 

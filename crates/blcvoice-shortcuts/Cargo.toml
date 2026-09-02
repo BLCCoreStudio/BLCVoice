@@ -1,0 +1,11 @@
+[package]
+name = "blcvoice-shortcuts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Runtime-independent global shortcut semantics for BLCVoice"
+
+[lints]
+workspace = true
