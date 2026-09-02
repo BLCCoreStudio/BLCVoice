@@ -217,12 +217,15 @@ impl InputCaptureFactory for CpalInputCaptureFactory {
         let data_metrics = Arc::clone(&metrics);
         let error_metrics = Arc::clone(&metrics);
         let cpal_stream_config = supported.config();
+        let channels = usize::from(stream_config.channels);
 
         let stream = device
             .build_input_stream_raw(
                 cpal_stream_config,
                 sample_format,
-                move |data, _info| ingest_data(data, &mut producer, &data_metrics),
+                move |data, _info| {
+                    ingest_data(data, &mut producer, &data_metrics, channels);
+                },
                 move |error| error_metrics.record_error(map_error_kind(error.kind())),
                 Some(STREAM_INITIALIZATION_TIMEOUT),
             )
@@ -268,7 +271,13 @@ impl InputCaptureSession for CpalInputCapture {
     }
 
     fn read_interleaved_f32(&mut self, output: &mut [f32]) -> usize {
-        let (filled, _unused) = self.consumer.pop_partial_slice(output);
+        let channels = usize::from(self.stream_config.channels);
+        let aligned_len = frame_aligned_len(output.len(), channels);
+        if aligned_len == 0 {
+            return 0;
+        }
+
+        let (filled, _unused) = self.consumer.pop_partial_slice(&mut output[..aligned_len]);
         filled.len()
     }
 
@@ -329,20 +338,45 @@ impl CaptureMetrics {
     }
 }
 
-fn ingest_data(data: &cpal::Data, producer: &mut Producer<f32>, metrics: &CaptureMetrics) {
+fn ingest_data(
+    data: &cpal::Data,
+    producer: &mut Producer<f32>,
+    metrics: &CaptureMetrics,
+    channels: usize,
+) {
     match data.sample_format() {
-        cpal::SampleFormat::F32 => ingest_typed(data.as_slice::<f32>(), producer, metrics),
-        cpal::SampleFormat::F64 => ingest_typed(data.as_slice::<f64>(), producer, metrics),
-        cpal::SampleFormat::I8 => ingest_typed(data.as_slice::<i8>(), producer, metrics),
-        cpal::SampleFormat::I16 => ingest_typed(data.as_slice::<i16>(), producer, metrics),
-        cpal::SampleFormat::I24 => ingest_typed(data.as_slice::<cpal::I24>(), producer, metrics),
-        cpal::SampleFormat::I32 => ingest_typed(data.as_slice::<i32>(), producer, metrics),
-        cpal::SampleFormat::I64 => ingest_typed(data.as_slice::<i64>(), producer, metrics),
-        cpal::SampleFormat::U8 => ingest_typed(data.as_slice::<u8>(), producer, metrics),
-        cpal::SampleFormat::U16 => ingest_typed(data.as_slice::<u16>(), producer, metrics),
-        cpal::SampleFormat::U24 => ingest_typed(data.as_slice::<cpal::U24>(), producer, metrics),
-        cpal::SampleFormat::U32 => ingest_typed(data.as_slice::<u32>(), producer, metrics),
-        cpal::SampleFormat::U64 => ingest_typed(data.as_slice::<u64>(), producer, metrics),
+        cpal::SampleFormat::F32 => {
+            ingest_typed(data.as_slice::<f32>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::F64 => {
+            ingest_typed(data.as_slice::<f64>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::I8 => ingest_typed(data.as_slice::<i8>(), producer, metrics, channels),
+        cpal::SampleFormat::I16 => {
+            ingest_typed(data.as_slice::<i16>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::I24 => {
+            ingest_typed(data.as_slice::<cpal::I24>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::I32 => {
+            ingest_typed(data.as_slice::<i32>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::I64 => {
+            ingest_typed(data.as_slice::<i64>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::U8 => ingest_typed(data.as_slice::<u8>(), producer, metrics, channels),
+        cpal::SampleFormat::U16 => {
+            ingest_typed(data.as_slice::<u16>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::U24 => {
+            ingest_typed(data.as_slice::<cpal::U24>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::U32 => {
+            ingest_typed(data.as_slice::<u32>(), producer, metrics, channels)
+        }
+        cpal::SampleFormat::U64 => {
+            ingest_typed(data.as_slice::<u64>(), producer, metrics, channels)
+        }
         _ => {
             metrics.record_samples(data.len(), data.len());
             metrics.record_error(AudioFailureKind::UnsupportedConfig);
@@ -350,8 +384,12 @@ fn ingest_data(data: &cpal::Data, producer: &mut Producer<f32>, metrics: &Captur
     }
 }
 
-fn ingest_typed<T>(samples: Option<&[T]>, producer: &mut Producer<f32>, metrics: &CaptureMetrics)
-where
+fn ingest_typed<T>(
+    samples: Option<&[T]>,
+    producer: &mut Producer<f32>,
+    metrics: &CaptureMetrics,
+    channels: usize,
+) where
     T: Copy,
     f32: cpal::FromSample<T>,
 {
@@ -360,7 +398,18 @@ where
         return;
     };
 
-    let writable = producer.slots().min(samples.len());
+    if channels == 0 {
+        metrics.record_samples(samples.len(), samples.len());
+        metrics.record_error(AudioFailureKind::BackendError);
+        return;
+    }
+
+    let complete_samples = frame_aligned_len(samples.len(), channels);
+    if complete_samples != samples.len() {
+        metrics.record_error(AudioFailureKind::BackendError);
+    }
+
+    let writable = frame_aligned_len(producer.slots().min(complete_samples), channels);
     if writable == 0 {
         metrics.record_samples(samples.len(), samples.len());
         return;
@@ -384,6 +433,14 @@ where
 
     chunk.commit_all();
     metrics.record_samples(samples.len(), samples.len() - writable);
+}
+
+fn frame_aligned_len(samples: usize, channels: usize) -> usize {
+    if channels == 0 {
+        0
+    } else {
+        samples - (samples % channels)
+    }
 }
 
 fn is_pcm_sample_format(format: cpal::SampleFormat) -> bool {
@@ -548,6 +605,7 @@ mod tests {
             Some(&[1.0_f32, 2.0, 3.0, 4.0, 5.0]),
             &mut producer,
             &metrics,
+            1,
         );
 
         let mut output = [0.0_f32; 5];
@@ -567,6 +625,62 @@ mod tests {
                 last_failure: None,
             }
         );
+    }
+
+    #[test]
+    fn realtime_handoff_never_commits_partial_frames() {
+        let (mut producer, mut consumer) = RingBuffer::<f32>::new(3);
+        let metrics = CaptureMetrics::default();
+
+        ingest_typed(Some(&[1.0_f32, 2.0, 3.0, 4.0]), &mut producer, &metrics, 2);
+
+        let mut output = [0.0_f32; 4];
+        let read = {
+            let (filled, _unused) = consumer.pop_partial_slice(&mut output);
+            filled.len()
+        };
+
+        assert_eq!(read, 2);
+        assert_eq!(&output[..read], &[1.0, 2.0]);
+        assert_eq!(
+            metrics.snapshot(),
+            CaptureStats {
+                received_samples: 4,
+                dropped_samples: 2,
+                callback_errors: 0,
+                last_failure: None,
+            }
+        );
+    }
+
+    #[test]
+    fn malformed_partial_frame_is_dropped_and_reported() {
+        let (mut producer, mut consumer) = RingBuffer::<f32>::new(4);
+        let metrics = CaptureMetrics::default();
+
+        ingest_typed(Some(&[1.0_f32, 2.0, 3.0]), &mut producer, &metrics, 2);
+
+        let mut output = [0.0_f32; 4];
+        let read = {
+            let (filled, _unused) = consumer.pop_partial_slice(&mut output);
+            filled.len()
+        };
+
+        assert_eq!(read, 2);
+        assert_eq!(&output[..read], &[1.0, 2.0]);
+        assert_eq!(metrics.snapshot().dropped_samples, 1);
+        assert_eq!(metrics.snapshot().callback_errors, 1);
+        assert_eq!(
+            metrics.snapshot().last_failure,
+            Some(AudioFailureKind::BackendError)
+        );
+    }
+
+    #[test]
+    fn frame_alignment_rounds_down_to_complete_frames() {
+        assert_eq!(frame_aligned_len(5, 2), 4);
+        assert_eq!(frame_aligned_len(6, 2), 6);
+        assert_eq!(frame_aligned_len(4, 0), 0);
     }
 
     #[test]
