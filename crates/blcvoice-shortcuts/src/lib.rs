@@ -8,6 +8,199 @@ pub const DEFAULT_DICTATION_TRIGGER: &str = "CTRL+SHIFT+space";
 /// Stable application-level identifier used by native shortcut backends.
 pub const DICTATION_SHORTCUT_ID: &str = "dictation.toggle";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DesktopPlatform {
+    Windows,
+    MacOs,
+    Linux,
+    Other,
+}
+
+impl fmt::Display for DesktopPlatform {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Windows => formatter.write_str("windows"),
+            Self::MacOs => formatter.write_str("macos"),
+            Self::Linux => formatter.write_str("linux"),
+            Self::Other => formatter.write_str("other"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxDisplayServer {
+    X11,
+    Wayland,
+    Unknown,
+}
+
+impl fmt::Display for LinuxDisplayServer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::X11 => formatter.write_str("x11"),
+            Self::Wayland => formatter.write_str("wayland"),
+            Self::Unknown => formatter.write_str("unknown"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShortcutEnvironment {
+    platform: DesktopPlatform,
+    linux_display_server: LinuxDisplayServer,
+}
+
+impl ShortcutEnvironment {
+    #[must_use]
+    pub const fn new(platform: DesktopPlatform, linux_display_server: LinuxDisplayServer) -> Self {
+        Self {
+            platform,
+            linux_display_server,
+        }
+    }
+
+    #[must_use]
+    pub const fn platform(&self) -> DesktopPlatform {
+        self.platform
+    }
+
+    #[must_use]
+    pub const fn linux_display_server(&self) -> LinuxDisplayServer {
+        self.linux_display_server
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutBackend {
+    NativeGlobalHotkey,
+    X11GlobalHotkey,
+    XdgDesktopPortal,
+}
+
+impl fmt::Display for ShortcutBackend {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NativeGlobalHotkey => formatter.write_str("nativeGlobalHotkey"),
+            Self::X11GlobalHotkey => formatter.write_str("x11GlobalHotkey"),
+            Self::XdgDesktopPortal => formatter.write_str("xdgDesktopPortal"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutCapabilityError {
+    UnsupportedPlatform,
+    UnknownLinuxDisplayServer,
+}
+
+impl fmt::Display for ShortcutCapabilityError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedPlatform => {
+                formatter.write_str("global shortcuts are not supported on this platform")
+            }
+            Self::UnknownLinuxDisplayServer => formatter.write_str(
+                "could not determine whether the Linux desktop session uses X11 or Wayland",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ShortcutCapabilityError {}
+
+/// Resolve the non-invasive shortcut backend allowed for one desktop environment.
+///
+/// Wayland deliberately maps to the compositor-mediated XDG Desktop Portal path;
+/// it must never silently fall back to raw global input capture.
+pub const fn resolve_shortcut_backend(
+    environment: ShortcutEnvironment,
+) -> Result<ShortcutBackend, ShortcutCapabilityError> {
+    match (environment.platform, environment.linux_display_server) {
+        (DesktopPlatform::Windows | DesktopPlatform::MacOs, _) => {
+            Ok(ShortcutBackend::NativeGlobalHotkey)
+        }
+        (DesktopPlatform::Linux, LinuxDisplayServer::X11) => Ok(ShortcutBackend::X11GlobalHotkey),
+        (DesktopPlatform::Linux, LinuxDisplayServer::Wayland) => {
+            Ok(ShortcutBackend::XdgDesktopPortal)
+        }
+        (DesktopPlatform::Linux, LinuxDisplayServer::Unknown) => {
+            Err(ShortcutCapabilityError::UnknownLinuxDisplayServer)
+        }
+        (DesktopPlatform::Other, _) => Err(ShortcutCapabilityError::UnsupportedPlatform),
+    }
+}
+
+/// Detect the effective Linux display server from standard desktop-session facts.
+///
+/// `XDG_SESSION_TYPE` wins when it explicitly identifies X11 or Wayland. When it
+/// is absent or inconclusive, the display socket variables are used as evidence.
+#[must_use]
+pub fn detect_linux_display_server(
+    xdg_session_type: Option<&str>,
+    wayland_display: Option<&str>,
+    x11_display: Option<&str>,
+) -> LinuxDisplayServer {
+    if let Some(session_type) = non_empty(xdg_session_type) {
+        if session_type.eq_ignore_ascii_case("wayland") {
+            return LinuxDisplayServer::Wayland;
+        }
+        if session_type.eq_ignore_ascii_case("x11") {
+            return LinuxDisplayServer::X11;
+        }
+    }
+
+    if non_empty(wayland_display).is_some() {
+        return LinuxDisplayServer::Wayland;
+    }
+    if non_empty(x11_display).is_some() {
+        return LinuxDisplayServer::X11;
+    }
+
+    LinuxDisplayServer::Unknown
+}
+
+/// Inspect the current process environment and return the platform facts needed
+/// by the shortcut backend resolver.
+#[must_use]
+pub fn current_shortcut_environment() -> ShortcutEnvironment {
+    current_shortcut_environment_impl()
+}
+
+#[cfg(target_os = "windows")]
+fn current_shortcut_environment_impl() -> ShortcutEnvironment {
+    ShortcutEnvironment::new(DesktopPlatform::Windows, LinuxDisplayServer::Unknown)
+}
+
+#[cfg(target_os = "macos")]
+fn current_shortcut_environment_impl() -> ShortcutEnvironment {
+    ShortcutEnvironment::new(DesktopPlatform::MacOs, LinuxDisplayServer::Unknown)
+}
+
+#[cfg(target_os = "linux")]
+fn current_shortcut_environment_impl() -> ShortcutEnvironment {
+    let xdg_session_type = std::env::var("XDG_SESSION_TYPE").ok();
+    let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
+    let x11_display = std::env::var("DISPLAY").ok();
+
+    ShortcutEnvironment::new(
+        DesktopPlatform::Linux,
+        detect_linux_display_server(
+            xdg_session_type.as_deref(),
+            wayland_display.as_deref(),
+            x11_display.as_deref(),
+        ),
+    )
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn current_shortcut_environment_impl() -> ShortcutEnvironment {
+    ShortcutEnvironment::new(DesktopPlatform::Other, LinuxDisplayServer::Unknown)
+}
+
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DictationShortcutMode {
     /// Press once to start recording, press again to stop.
@@ -170,6 +363,88 @@ impl std::error::Error for ShortcutModeError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_platforms_resolve_to_native_global_hotkeys() {
+        for platform in [DesktopPlatform::Windows, DesktopPlatform::MacOs] {
+            assert_eq!(
+                resolve_shortcut_backend(ShortcutEnvironment::new(
+                    platform,
+                    LinuxDisplayServer::Unknown,
+                )),
+                Ok(ShortcutBackend::NativeGlobalHotkey)
+            );
+        }
+    }
+
+    #[test]
+    fn linux_x11_resolves_to_x11_backend() {
+        assert_eq!(
+            resolve_shortcut_backend(ShortcutEnvironment::new(
+                DesktopPlatform::Linux,
+                LinuxDisplayServer::X11,
+            )),
+            Ok(ShortcutBackend::X11GlobalHotkey)
+        );
+    }
+
+    #[test]
+    fn linux_wayland_resolves_to_portal_backend() {
+        assert_eq!(
+            resolve_shortcut_backend(ShortcutEnvironment::new(
+                DesktopPlatform::Linux,
+                LinuxDisplayServer::Wayland,
+            )),
+            Ok(ShortcutBackend::XdgDesktopPortal)
+        );
+    }
+
+    #[test]
+    fn unknown_linux_session_is_an_explicit_capability_error() {
+        assert_eq!(
+            resolve_shortcut_backend(ShortcutEnvironment::new(
+                DesktopPlatform::Linux,
+                LinuxDisplayServer::Unknown,
+            )),
+            Err(ShortcutCapabilityError::UnknownLinuxDisplayServer)
+        );
+    }
+
+    #[test]
+    fn xdg_session_type_takes_precedence_over_xwayland_display() {
+        assert_eq!(
+            detect_linux_display_server(Some("wayland"), Some("wayland-0"), Some(":0")),
+            LinuxDisplayServer::Wayland
+        );
+        assert_eq!(
+            detect_linux_display_server(Some("x11"), Some("wayland-0"), Some(":0")),
+            LinuxDisplayServer::X11
+        );
+    }
+
+    #[test]
+    fn display_variables_are_used_when_session_type_is_missing() {
+        assert_eq!(
+            detect_linux_display_server(None, Some("wayland-1"), Some(":0")),
+            LinuxDisplayServer::Wayland
+        );
+        assert_eq!(
+            detect_linux_display_server(None, None, Some(":1")),
+            LinuxDisplayServer::X11
+        );
+        assert_eq!(
+            detect_linux_display_server(Some("tty"), None, None),
+            LinuxDisplayServer::Unknown
+        );
+    }
+
+    #[test]
+    fn blank_environment_values_do_not_create_false_capabilities() {
+        assert_eq!(
+            detect_linux_display_server(Some("  "), Some(""), Some("   ")),
+            LinuxDisplayServer::Unknown
+        );
+    }
 
     #[test]
     fn toggle_mode_starts_and_stops_on_distinct_presses() {
