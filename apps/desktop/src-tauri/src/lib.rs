@@ -8,7 +8,7 @@ use ipc::{
     DesktopState, audio_input_discovery, desktop_status, microphone_test_cancel,
     microphone_test_finish, microphone_test_start,
 };
-use shortcut::shortcut_capability;
+use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};
 
 #[tauri::command]
 fn core_status() -> String {
@@ -19,6 +19,11 @@ fn core_status() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(DesktopState::production())
+        .manage(ShortcutService::production())
+        .setup(|app| {
+            install_shortcut_backend(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             core_status,
             audio_input_discovery,
