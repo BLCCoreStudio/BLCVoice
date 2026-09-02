@@ -23,8 +23,14 @@ blcvoice-audio = { path = "../../../crates/blcvoice-audio" }
 blcvoice-audio-cpal = { path = "../../../crates/blcvoice-audio-cpal" }
 blcvoice-core = { path = "../../../crates/blcvoice-core" }
 blcvoice-runtime = { path = "../../../crates/blcvoice-runtime" }
+blcvoice-shortcuts = { path = "../../../crates/blcvoice-shortcuts" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
+tauri-plugin-global-shortcut = "2.3.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13.13", default-features = false, features = ["tokio", "global_shortcuts"] }
+futures-util = "0.3"
 
 [lints]
 workspace = true
