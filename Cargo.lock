@@ -305,6 +305,8 @@ name = "blcvoice-desktop"
 version = "0.1.0"
 dependencies = [
  "ashpd",
+ "blcvoice-asr",
+ "blcvoice-asr-transcribe",
  "blcvoice-audio",
  "blcvoice-audio-cpal",
  "blcvoice-core",
