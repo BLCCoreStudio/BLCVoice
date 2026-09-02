@@ -5,12 +5,15 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use blcvoice_asr::{RecognitionOptions, SpeechRecognizer};
 use blcvoice_audio::{
     AudioDeviceId, CaptureBufferConfig, InputCaptureFactory, InputCaptureRequest,
     InputDeviceDiscovery, InputDiscovery,
 };
 use blcvoice_core::{SessionId, SessionSnapshot, SessionState};
-use blcvoice_runtime::{DictationRuntime, FinalizationReport, RuntimeError};
+use blcvoice_runtime::{
+    DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription,
+};
 
 const CAPTURE_PUMP_INTERVAL: Duration = Duration::from_millis(10);
 pub const MICROPHONE_TEST_MAX_DURATION_MS: u32 = 30_000;
@@ -133,6 +136,85 @@ impl DesktopCaptureService {
         &self,
         device_id: AudioDeviceId,
     ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.start_capture(device_id, MICROPHONE_TEST_MAX_DURATION_MS)
+    }
+
+    pub fn finish_microphone_test(
+        &self,
+        session_id: SessionId,
+    ) -> Result<MicrophoneTestReport, DesktopCaptureError> {
+        let finalized = self.finish_recording(session_id)?;
+        let terminal_session = self.runtime.cancel(session_id)?;
+
+        Ok(MicrophoneTestReport {
+            finalized,
+            terminal_session,
+        })
+    }
+
+    pub fn cancel_microphone_test(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.cancel_session(session_id)
+    }
+
+    pub fn start_dictation_recording(
+        &self,
+        device_id: AudioDeviceId,
+        max_duration_ms: u32,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.start_capture(device_id, max_duration_ms)
+    }
+
+    pub fn finish_dictation_recording(
+        &self,
+        session_id: SessionId,
+    ) -> Result<FinalizationReport, DesktopCaptureError> {
+        self.finish_recording(session_id)
+    }
+
+    pub fn transcribe_dictation(
+        &self,
+        session_id: SessionId,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+    ) -> Result<RuntimeTranscription, DesktopCaptureError> {
+        self.runtime
+            .transcribe(session_id, recognizer, options, false)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    pub fn fail_dictation_recognition(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.runtime
+            .fail_recognition(session_id)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    pub fn cancel_dictation(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.cancel_session(session_id)
+    }
+
+    pub fn dictation_insertion_delivered(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.runtime
+            .insertion_delivered(session_id)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    fn start_capture(
+        &self,
+        device_id: AudioDeviceId,
+        max_duration_ms: u32,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
         {
             let mut control = self.lock_control();
             Self::reap_finished_worker(&mut control);
@@ -150,9 +232,7 @@ impl DesktopCaptureService {
             device_id,
             buffer: CaptureBufferConfig::default(),
         };
-        let start_result = self
-            .runtime
-            .start_recording(&request, MICROPHONE_TEST_MAX_DURATION_MS);
+        let start_result = self.runtime.start_recording(&request, max_duration_ms);
 
         let mut control = self.lock_control();
         control.start_in_flight = false;
@@ -171,10 +251,10 @@ impl DesktopCaptureService {
         Ok(session)
     }
 
-    pub fn finish_microphone_test(
+    fn finish_recording(
         &self,
         session_id: SessionId,
-    ) -> Result<MicrophoneTestReport, DesktopCaptureError> {
+    ) -> Result<FinalizationReport, DesktopCaptureError> {
         let worker = self.take_worker(session_id)?;
         match worker.stop_and_join()? {
             PumpExit::Stopped => {}
@@ -187,16 +267,12 @@ impl DesktopCaptureService {
             }
         }
 
-        let finalized = self.runtime.finalize_recording(session_id)?;
-        let terminal_session = self.runtime.cancel(session_id)?;
-
-        Ok(MicrophoneTestReport {
-            finalized,
-            terminal_session,
-        })
+        self.runtime
+            .finalize_recording(session_id)
+            .map_err(DesktopCaptureError::from)
     }
 
-    pub fn cancel_microphone_test(
+    fn cancel_session(
         &self,
         session_id: SessionId,
     ) -> Result<SessionSnapshot, DesktopCaptureError> {
@@ -281,7 +357,7 @@ fn stale_worker(supplied: SessionId, active: SessionId) -> DesktopCaptureError {
     DesktopCaptureError::new(
         DesktopCaptureErrorKind::StaleSession,
         format!(
-            "microphone test session {} is stale; capture worker belongs to session {}",
+            "capture session {} is stale; capture worker belongs to session {}",
             supplied.get(),
             active.get()
         ),
@@ -562,20 +638,39 @@ mod tests {
     }
 
     #[test]
-    fn second_test_is_rejected_while_capture_worker_is_active() {
+    fn production_recording_finalizes_without_discarding_audio() {
+        let service = service();
+        let session = service
+            .start_dictation_recording(fake_device_id(), 60_000)
+            .expect("dictation recording must start");
+
+        let finalized = service
+            .finish_dictation_recording(session.id)
+            .expect("dictation recording must finalize");
+
+        assert_eq!(finalized.source_frames, 4);
+        assert_eq!(finalized.session.state, SessionState::Transcribing);
+        assert_eq!(service.current_session(), Some(finalized.session));
+        service
+            .cancel_dictation(session.id)
+            .expect("finalized test dictation must cancel");
+    }
+
+    #[test]
+    fn second_capture_is_rejected_while_worker_is_active() {
         let service = service();
         let first = service
             .start_microphone_test(fake_device_id())
-            .expect("first microphone test must start");
+            .expect("first capture must start");
 
         let error = service
-            .start_microphone_test(fake_device_id())
-            .expect_err("overlapping microphone tests must be rejected");
+            .start_dictation_recording(fake_device_id(), 60_000)
+            .expect_err("overlapping capture must be rejected");
 
         assert_eq!(error.kind(), DesktopCaptureErrorKind::Busy);
         service
             .cancel_microphone_test(first.id)
-            .expect("first microphone test must cancel");
+            .expect("first capture must cancel");
     }
 
     #[test]
@@ -643,7 +738,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_session_can_be_replaced_by_a_new_microphone_test() {
+    fn terminal_session_can_be_replaced_by_a_new_capture() {
         let service = service();
         let first = service
             .start_microphone_test(fake_device_id())
@@ -653,12 +748,12 @@ mod tests {
             .expect("first microphone test must cancel");
 
         let second = service
-            .start_microphone_test(fake_device_id())
-            .expect("second microphone test must start");
+            .start_dictation_recording(fake_device_id(), 60_000)
+            .expect("second capture must start");
 
         assert_eq!(second.id.get(), first.id.get() + 1);
         service
-            .cancel_microphone_test(second.id)
-            .expect("second microphone test must cancel");
+            .cancel_dictation(second.id)
+            .expect("second capture must cancel");
     }
 }
