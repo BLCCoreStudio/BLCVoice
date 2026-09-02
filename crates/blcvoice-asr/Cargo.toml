@@ -1,0 +1,11 @@
+[package]
+name = "blcvoice-asr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Speech recognition domain contracts for BLCVoice"
+
+[lints]
+workspace = true
