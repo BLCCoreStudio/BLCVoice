@@ -22,7 +22,7 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Refresh lockfile
-        run: cargo +1.98.0 metadata --no-deps --format-version 1 > /dev/null
+        run: cargo +1.98.0 generate-lockfile
       - name: Commit lockfile if changed
         run: |
           if git diff --quiet -- Cargo.lock; then
