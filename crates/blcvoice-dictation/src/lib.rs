@@ -22,6 +22,66 @@ pub struct PumpReport {
     pub stats: CaptureStats,
 }
 
+/// A complete, integrity-checked device-native utterance whose capture stream has been quiesced.
+///
+/// This value deliberately contains no recognizer state. Application code can mark the session's
+/// audio as finalized before beginning potentially long-running ASR work, and can retry recognition
+/// against the same captured utterance when policy allows it.
+#[derive(Debug)]
+pub struct FinalizedRecording {
+    utterance: UtteranceBuffer,
+    capture_stats: CaptureStats,
+}
+
+impl FinalizedRecording {
+    #[must_use]
+    pub fn source_format(&self) -> ProcessingAudioFormat {
+        self.utterance.format()
+    }
+
+    #[must_use]
+    pub fn source_frames(&self) -> usize {
+        self.utterance.frames()
+    }
+
+    #[must_use]
+    pub const fn capture_stats(&self) -> CaptureStats {
+        self.capture_stats
+    }
+
+    /// Preprocess this finalized utterance to the recognizer's required format and run ASR.
+    ///
+    /// The recording is borrowed rather than consumed so a caller may retry a transient recognition
+    /// failure without reopening the microphone or duplicating the source audio buffer.
+    pub fn transcribe(
+        &self,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+    ) -> Result<CaptureTranscription, DictationPipelineError> {
+        let asr_format = recognizer.capabilities().required_audio_format;
+        let processing_target = processing_format(asr_format)?;
+        let mut preprocessor = AudioPreprocessor::new(self.utterance.format(), processing_target)
+            .map_err(DictationPipelineError::Processing)?;
+        let source_frames = self.utterance.frames();
+        let processed = preprocessor
+            .process_utterance(self.utterance.as_interleaved())
+            .map_err(DictationPipelineError::Processing)?;
+        let asr_frames = processed.frames();
+        let input = AsrAudioInput::new(processed.samples(), asr_format)
+            .map_err(DictationPipelineError::InvalidAsrAudio)?;
+        let transcription = recognizer
+            .transcribe(input, options)
+            .map_err(DictationPipelineError::Recognition)?;
+
+        Ok(CaptureTranscription {
+            transcription,
+            capture_stats: self.capture_stats,
+            source_frames,
+            asr_frames,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaptureTranscription {
     pub transcription: Transcription,
@@ -215,15 +275,11 @@ impl RecordingCollector {
         })
     }
 
-    /// Quiesce capture, drain its residual handoff, preprocess the complete utterance and run ASR.
+    /// Quiesce capture, drain residual samples and validate that the utterance is complete.
     ///
-    /// Any observed ring-buffer loss or callback failure invalidates the utterance. BLCVoice must
-    /// never turn known-corrupted capture into an apparently successful dictation.
-    pub fn finish(
-        mut self,
-        recognizer: &mut dyn SpeechRecognizer,
-        options: &RecognitionOptions,
-    ) -> Result<CaptureTranscription, DictationPipelineError> {
+    /// No preprocessing or speech recognition occurs here. A successful return is the application
+    /// boundary at which `SessionEvent::AudioFinalized` may be emitted before ASR starts.
+    pub fn finalize(mut self) -> Result<FinalizedRecording, DictationPipelineError> {
         self.capture
             .pause()
             .map_err(DictationPipelineError::Capture)?;
@@ -239,27 +295,22 @@ impl RecordingCollector {
             return Err(DictationPipelineError::EmptyUtterance);
         }
 
-        let asr_format = recognizer.capabilities().required_audio_format;
-        let processing_target = processing_format(asr_format)?;
-        let mut preprocessor = AudioPreprocessor::new(self.source_format, processing_target)
-            .map_err(DictationPipelineError::Processing)?;
-        let source_frames = self.utterance.frames();
-        let processed = preprocessor
-            .process_utterance(self.utterance.as_interleaved())
-            .map_err(DictationPipelineError::Processing)?;
-        let asr_frames = processed.frames();
-        let input = AsrAudioInput::new(processed.samples(), asr_format)
-            .map_err(DictationPipelineError::InvalidAsrAudio)?;
-        let transcription = recognizer
-            .transcribe(input, options)
-            .map_err(DictationPipelineError::Recognition)?;
-
-        Ok(CaptureTranscription {
-            transcription,
+        Ok(FinalizedRecording {
+            utterance: self.utterance,
             capture_stats,
-            source_frames,
-            asr_frames,
         })
+    }
+
+    /// Convenience compatibility path for callers that do not need the explicit finalization seam.
+    ///
+    /// Runtime orchestration should prefer `finalize()` followed by
+    /// `FinalizedRecording::transcribe()` so lifecycle state accurately reflects long ASR work.
+    pub fn finish(
+        self,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+    ) -> Result<CaptureTranscription, DictationPipelineError> {
+        self.finalize()?.transcribe(recognizer, options)
     }
 }
 
@@ -402,21 +453,47 @@ mod tests {
         }
     }
 
-    #[test]
-    fn drains_capture_downmixes_resamples_and_transcribes() {
-        let source_frames = 4_800usize;
-        let mut samples = Vec::with_capacity(source_frames * 2);
-        for _ in 0..source_frames {
+    fn stereo_samples(frames: usize) -> Vec<f32> {
+        let mut samples = Vec::with_capacity(frames * 2);
+        for _ in 0..frames {
             samples.extend_from_slice(&[0.2, 0.2]);
         }
-        let capture = Box::new(FakeCapture::normal(stereo_48k(), samples));
+        samples
+    }
+
+    #[test]
+    fn finalizes_capture_before_recognition() {
+        let source_frames = 4_800usize;
+        let capture = Box::new(FakeCapture::normal(
+            stereo_48k(),
+            stereo_samples(source_frames),
+        ));
         let collector = RecordingCollector::with_read_frames(capture, 1_000, 128)
             .expect("collector must initialize");
+
+        let finalized = collector.finalize().expect("capture must finalize");
+
+        assert_eq!(finalized.source_frames(), source_frames);
+        assert_eq!(finalized.source_format().channels(), 2);
+        assert_eq!(finalized.source_format().sample_rate_hz(), 48_000);
+        assert_eq!(finalized.capture_stats(), CaptureStats::default());
+    }
+
+    #[test]
+    fn finalized_audio_downmixes_resamples_and_transcribes() {
+        let source_frames = 4_800usize;
+        let capture = Box::new(FakeCapture::normal(
+            stereo_48k(),
+            stereo_samples(source_frames),
+        ));
+        let collector = RecordingCollector::with_read_frames(capture, 1_000, 128)
+            .expect("collector must initialize");
+        let finalized = collector.finalize().expect("capture must finalize");
         let mut recognizer = FakeRecognizer::mono_16k();
 
-        let result = collector
-            .finish(&mut recognizer, &RecognitionOptions::default())
-            .expect("capture-to-ASR pipeline must succeed");
+        let result = finalized
+            .transcribe(&mut recognizer, &RecognitionOptions::default())
+            .expect("finalized audio must transcribe");
 
         assert_eq!(result.transcription.text, "hello");
         assert_eq!(result.source_frames, source_frames);
@@ -430,7 +507,46 @@ mod tests {
     }
 
     #[test]
-    fn capture_integrity_loss_blocks_recognition() {
+    fn finalized_audio_can_be_retried_without_recapture() {
+        let capture = Box::new(FakeCapture::normal(stereo_48k(), stereo_samples(4_800)));
+        let collector = RecordingCollector::new(capture, 1_000).expect("collector must initialize");
+        let finalized = collector.finalize().expect("capture must finalize");
+        let mut recognizer = FakeRecognizer::mono_16k();
+
+        finalized
+            .transcribe(&mut recognizer, &RecognitionOptions::default())
+            .expect("first recognition must succeed");
+        finalized
+            .transcribe(&mut recognizer, &RecognitionOptions::default())
+            .expect("second recognition must reuse finalized audio");
+
+        assert_eq!(recognizer.calls, 2);
+        assert_eq!(finalized.source_frames(), 4_800);
+    }
+
+    #[test]
+    fn finish_remains_a_compatible_convenience_path() {
+        let source_frames = 4_800usize;
+        let capture = Box::new(FakeCapture::normal(
+            stereo_48k(),
+            stereo_samples(source_frames),
+        ));
+        let collector = RecordingCollector::with_read_frames(capture, 1_000, 128)
+            .expect("collector must initialize");
+        let mut recognizer = FakeRecognizer::mono_16k();
+
+        let result = collector
+            .finish(&mut recognizer, &RecognitionOptions::default())
+            .expect("capture-to-ASR compatibility path must succeed");
+
+        assert_eq!(result.transcription.text, "hello");
+        assert_eq!(result.source_frames, source_frames);
+        assert_eq!(result.asr_frames, 1_600);
+        assert_eq!(recognizer.calls, 1);
+    }
+
+    #[test]
+    fn capture_integrity_loss_fails_during_finalization() {
         let mut capture = FakeCapture::normal(stereo_48k(), vec![0.1, 0.1, 0.2, 0.2]);
         capture.stats = CaptureStats {
             received_samples: 4,
@@ -440,31 +556,27 @@ mod tests {
         };
         let collector =
             RecordingCollector::new(Box::new(capture), 1_000).expect("collector must initialize");
-        let mut recognizer = FakeRecognizer::mono_16k();
 
         let error = collector
-            .finish(&mut recognizer, &RecognitionOptions::default())
-            .expect_err("known capture loss must invalidate dictation");
+            .finalize()
+            .expect_err("known capture loss must invalidate finalization");
 
         assert!(matches!(
             error,
             DictationPipelineError::CaptureIntegrity { .. }
         ));
-        assert_eq!(recognizer.calls, 0);
     }
 
     #[test]
-    fn empty_finalized_utterance_fails_before_asr() {
+    fn empty_utterance_fails_during_finalization() {
         let capture = Box::new(FakeCapture::normal(stereo_48k(), Vec::new()));
         let collector = RecordingCollector::new(capture, 1_000).expect("collector must initialize");
-        let mut recognizer = FakeRecognizer::mono_16k();
 
         let error = collector
-            .finish(&mut recognizer, &RecognitionOptions::default())
-            .expect_err("empty capture must fail");
+            .finalize()
+            .expect_err("empty capture must fail finalization");
 
         assert!(matches!(error, DictationPipelineError::EmptyUtterance));
-        assert_eq!(recognizer.calls, 0);
     }
 
     #[test]
@@ -474,17 +586,15 @@ mod tests {
         let capture = Box::new(FakeCapture::normal(stereo_48k(), samples));
         let collector = RecordingCollector::with_read_frames(capture, 2, 128)
             .expect("collector must initialize");
-        let mut recognizer = FakeRecognizer::mono_16k();
 
         let error = collector
-            .finish(&mut recognizer, &RecognitionOptions::default())
+            .finalize()
             .expect_err("97 source frames exceed a 2 ms 48 kHz limit of 96 frames");
 
         assert!(matches!(
             error,
             DictationPipelineError::Processing(ProcessingError::UtteranceTooLong { .. })
         ));
-        assert_eq!(recognizer.calls, 0);
     }
 
     #[test]
@@ -523,6 +633,12 @@ mod tests {
         assert_eq!(report.frames_read, 4);
         assert_eq!(report.buffered_frames, 4);
         assert_eq!(collector.buffered_frames(), 4);
+    }
+
+    #[test]
+    fn finalized_recording_is_safe_to_move_between_worker_threads() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<FinalizedRecording>();
     }
 
     #[test]
