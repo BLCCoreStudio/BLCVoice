@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/blcvoice-core",
+  "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BLCCoreStudio/BLCVoice"
+rust-version = "1.98"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"

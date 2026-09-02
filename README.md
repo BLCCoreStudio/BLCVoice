@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The architecture and reliability requirements are being established before feature implementation begins. There are no production-ready releases yet.
+BLCVoice is in **pre-alpha development**. The repository now contains the first executable Rust/Tauri foundation and a platform-independent dictation session lifecycle. Audio capture, speech recognition and text insertion are not implemented yet, and there are no production-ready releases.
 
 ## Product principles
 
@@ -36,6 +36,17 @@ Deep integrations with tools such as Claude Code, Codex and VS Code are planned 
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system boundaries and [docs/adr](docs/adr) for accepted architecture decisions.
+
+## Development
+
+The current foundation pins Rust 1.98.0. On Linux, install the Tauri 2 system prerequisites for your distribution before building the desktop shell.
+
+```bash
+cargo test -p blcvoice-core --all-targets
+cargo run -p blcvoice-desktop
+```
+
+CI validates the platform-independent core on Linux, Windows and macOS and compiles the Tauri desktop shell on Linux.
 
 ## Contributing
 
