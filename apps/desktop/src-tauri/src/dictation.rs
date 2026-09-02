@@ -160,10 +160,7 @@ impl DesktopDictationService {
         Self::new(capture, Arc::new(TranscribeRecognizerFactory))
     }
 
-    fn new(
-        capture: Arc<DesktopCaptureService>,
-        recognizers: Arc<dyn RecognizerFactory>,
-    ) -> Self {
+    fn new(capture: Arc<DesktopCaptureService>, recognizers: Arc<dyn RecognizerFactory>) -> Self {
         Self {
             capture,
             recognizers,
@@ -605,12 +602,20 @@ mod tests {
     fn capture_to_asr_reaches_pending_insertion_with_real_runtime_lifecycle() {
         let service = service(Arc::new(FakeRecognizerFactory));
         let session = service.start(request()).expect("dictation must start");
-        let report = service.finish(session.id).expect("dictation must transcribe");
+        let report = service
+            .finish(session.id)
+            .expect("dictation must transcribe");
 
         assert_eq!(report.engine_id, "fake");
         assert_eq!(report.model_id, "fake-model");
-        assert_eq!(report.transcription.capture.transcription.text, "hello from BLCVoice");
-        assert_eq!(report.transcription.session.state, blcvoice_core::SessionState::Inserting);
+        assert_eq!(
+            report.transcription.capture.transcription.text,
+            "hello from BLCVoice"
+        );
+        assert_eq!(
+            report.transcription.session.state,
+            blcvoice_core::SessionState::Inserting
+        );
         assert_eq!(service.state_name(), "awaitingInsertion");
 
         let completed = service
@@ -630,7 +635,9 @@ mod tests {
 
         assert_eq!(error.kind(), DesktopDictationErrorKind::StaleSession);
         assert_eq!(service.active_session_id(), Some(session.id));
-        service.cancel(session.id).expect("active dictation must cancel");
+        service
+            .cancel(session.id)
+            .expect("active dictation must cancel");
     }
 
     #[test]
@@ -643,6 +650,8 @@ mod tests {
             .expect_err("overlapping dictation must be rejected");
 
         assert_eq!(error.kind(), DesktopDictationErrorKind::Busy);
-        service.cancel(session.id).expect("active dictation must cancel");
+        service
+            .cancel(session.id)
+            .expect("active dictation must cancel");
     }
 }

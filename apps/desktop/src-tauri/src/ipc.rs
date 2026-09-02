@@ -287,7 +287,8 @@ pub async fn audio_input_discovery(
     state: State<'_, DesktopState>,
 ) -> Result<InputDiscoveryDto, CommandErrorDto> {
     let capture = Arc::clone(&state.capture);
-    run_capture_blocking(move || Ok(InputDiscoveryDto::from(capture.discover_input_devices()))).await
+    run_capture_blocking(move || Ok(InputDiscoveryDto::from(capture.discover_input_devices())))
+        .await
 }
 
 #[tauri::command]

@@ -11,9 +11,7 @@ use blcvoice_audio::{
     InputDeviceDiscovery, InputDiscovery,
 };
 use blcvoice_core::{SessionId, SessionSnapshot, SessionState};
-use blcvoice_runtime::{
-    DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription,
-};
+use blcvoice_runtime::{DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription};
 
 const CAPTURE_PUMP_INTERVAL: Duration = Duration::from_millis(10);
 pub const MICROPHONE_TEST_MAX_DURATION_MS: u32 = 30_000;
