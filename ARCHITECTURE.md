@@ -102,7 +102,11 @@ Names are provisional until implementation starts, but responsibilities should r
 
 ### `core`
 
-Owns dictation session state, orchestration and domain-level results. It should not contain operating-system API calls or model-runtime implementation code.
+Owns the dictation state machine, session coordination and domain-level results. It should not contain operating-system API calls, application work-resource ownership or model-runtime implementation code.
+
+### `runtime`
+
+Owns runtime-independent application orchestration across core, audio, dictation and ASR contracts. It owns ephemeral per-session capture/finalized-audio resources, applies session-qualified stale-work rejection, and never depends on CPAL, Tauri or a concrete ASR engine.
 
 ### `audio`
 

@@ -8,6 +8,7 @@ members = [
   "crates/blcvoice-asr",
   "crates/blcvoice-asr-transcribe",
   "crates/blcvoice-dictation",
+  "crates/blcvoice-runtime",
   "apps/desktop/src-tauri",
 ]
 
