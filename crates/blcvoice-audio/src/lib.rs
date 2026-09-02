@@ -157,6 +157,14 @@ pub struct AudioFailure {
     pub message: String,
 }
 
+impl fmt::Display for AudioFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl Error for AudioFailure {}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InputDiscovery {
     pub selected_backend: Option<AudioBackend>,
@@ -174,6 +182,106 @@ impl InputDiscovery {
 /// Runtime adapter contract for discovering microphone/input devices.
 pub trait InputDeviceDiscovery: Send + Sync {
     fn discover_input_devices(&self) -> InputDiscovery;
+}
+
+/// Bounded handoff capacity between the real-time callback and normal worker code.
+///
+/// The buffer is deliberately time-based so a backend can size it from the native
+/// channel count and sample rate without exposing queue implementation details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureBufferConfig {
+    capacity_ms: u32,
+}
+
+impl CaptureBufferConfig {
+    pub const DEFAULT_CAPACITY_MS: u32 = 1_000;
+    pub const MAX_CAPACITY_MS: u32 = 5_000;
+
+    pub fn new(capacity_ms: u32) -> Result<Self, InvalidCaptureBufferConfig> {
+        if capacity_ms == 0 || capacity_ms > Self::MAX_CAPACITY_MS {
+            return Err(InvalidCaptureBufferConfig);
+        }
+        Ok(Self { capacity_ms })
+    }
+
+    #[must_use]
+    pub fn capacity_ms(self) -> u32 {
+        self.capacity_ms
+    }
+
+    pub fn capacity_samples(
+        self,
+        stream: &AudioStreamConfig,
+    ) -> Result<usize, InvalidCaptureBufferConfig> {
+        if stream.channels == 0 || stream.sample_rate_hz == 0 {
+            return Err(InvalidCaptureBufferConfig);
+        }
+
+        let samples = u64::from(stream.sample_rate_hz)
+            .checked_mul(u64::from(stream.channels))
+            .and_then(|value| value.checked_mul(u64::from(self.capacity_ms)))
+            .map(|value| value.div_ceil(1_000))
+            .ok_or(InvalidCaptureBufferConfig)?;
+
+        usize::try_from(samples).map_err(|_| InvalidCaptureBufferConfig)
+    }
+}
+
+impl Default for CaptureBufferConfig {
+    fn default() -> Self {
+        Self {
+            capacity_ms: Self::DEFAULT_CAPACITY_MS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidCaptureBufferConfig;
+
+impl fmt::Display for InvalidCaptureBufferConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("capture buffer duration or stream configuration is invalid")
+    }
+}
+
+impl Error for InvalidCaptureBufferConfig {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputCaptureRequest {
+    pub device_id: AudioDeviceId,
+    pub buffer: CaptureBufferConfig,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CaptureStats {
+    pub received_samples: u64,
+    pub dropped_samples: u64,
+    pub callback_errors: u64,
+    pub last_failure: Option<AudioFailureKind>,
+}
+
+/// Active microphone stream exposed to the application without leaking backend types.
+///
+/// Samples are normalized to `f32` but remain interleaved and at the device-native
+/// sample rate/channel count. Downmixing, resampling and VAD happen downstream.
+pub trait InputCaptureSession: Send {
+    fn stream_config(&self) -> &AudioStreamConfig;
+
+    fn read_interleaved_f32(&mut self, output: &mut [f32]) -> usize;
+
+    fn stats(&self) -> CaptureStats;
+
+    fn pause(&self) -> Result<(), AudioFailure>;
+
+    fn resume(&self) -> Result<(), AudioFailure>;
+}
+
+/// Runtime adapter contract for starting a bounded, non-blocking microphone capture session.
+pub trait InputCaptureFactory: Send + Sync {
+    fn start_input_capture(
+        &self,
+        request: &InputCaptureRequest,
+    ) -> Result<Box<dyn InputCaptureSession>, AudioFailure>;
 }
 
 #[cfg(test)]
@@ -233,5 +341,23 @@ mod tests {
             failures: Vec::new(),
         };
         assert!(discovery.has_usable_input());
+    }
+
+    #[test]
+    fn capture_buffer_is_sized_from_native_stream_shape() {
+        let stream = AudioStreamConfig {
+            channels: 2,
+            sample_rate_hz: 48_000,
+            sample_format: AudioSampleFormat::F32,
+        };
+        let buffer = CaptureBufferConfig::new(1_000).expect("valid buffer");
+
+        assert_eq!(buffer.capacity_samples(&stream), Ok(96_000));
+    }
+
+    #[test]
+    fn rejects_zero_and_unbounded_capture_buffers() {
+        assert!(CaptureBufferConfig::new(0).is_err());
+        assert!(CaptureBufferConfig::new(CaptureBufferConfig::MAX_CAPACITY_MS + 1).is_err());
     }
 }

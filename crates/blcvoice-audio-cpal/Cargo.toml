@@ -9,6 +9,7 @@ description = "CPAL audio backend adapter for BLCVoice"
 
 [dependencies]
 blcvoice-audio = { path = "../blcvoice-audio" }
+rtrb = "0.4.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cpal = { version = "0.18.2", features = ["pipewire", "pulseaudio"] }
