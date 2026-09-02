@@ -66,11 +66,7 @@ impl ShortcutService {
         let (backend, selection_error, registration_state) =
             match resolve_shortcut_backend(environment) {
                 Ok(backend) => (Some(backend), None, ShortcutRegistrationState::Pending),
-                Err(error) => (
-                    None,
-                    Some(error),
-                    ShortcutRegistrationState::Unavailable,
-                ),
+                Err(error) => (None, Some(error), ShortcutRegistrationState::Unavailable),
             };
 
         Self {
@@ -215,9 +211,7 @@ fn install_portal_shortcut<R: Runtime>(app: &mut App<R>) {
 
     tauri::async_runtime::spawn(async move {
         if let Err(message) = run_portal_shortcut(app_handle.clone()).await {
-            app_handle
-                .state::<ShortcutService>()
-                .mark_failed(message);
+            app_handle.state::<ShortcutService>().mark_failed(message);
         }
     });
 }
@@ -242,12 +236,7 @@ async fn run_portal_shortcut<R: Runtime>(app: AppHandle<R>) -> Result<(), String
     let shortcut = NewShortcut::new(DICTATION_SHORTCUT_ID, "Toggle BLCVoice dictation")
         .preferred_trigger(DEFAULT_DICTATION_TRIGGER);
     let request = portal
-        .bind_shortcuts(
-            &session,
-            &[shortcut],
-            None,
-            BindShortcutsOptions::default(),
-        )
+        .bind_shortcuts(&session, &[shortcut], None, BindShortcutsOptions::default())
         .await
         .map_err(|error| format!("could not request XDG global shortcut binding: {error}"))?;
     let response = request
