@@ -148,7 +148,11 @@ fn host_priority(name: &str) -> u8 {
     }
 }
 
-fn failure(backend: Option<AudioBackend>, device_id: Option<AudioDeviceId>, error: &cpal::Error) -> AudioFailure {
+fn failure(
+    backend: Option<AudioBackend>,
+    device_id: Option<AudioDeviceId>,
+    error: &cpal::Error,
+) -> AudioFailure {
     AudioFailure {
         backend,
         device_id,
