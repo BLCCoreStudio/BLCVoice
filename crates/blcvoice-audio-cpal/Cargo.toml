@@ -1,0 +1,20 @@
+[package]
+name = "blcvoice-audio-cpal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "CPAL audio backend adapter for BLCVoice"
+
+[dependencies]
+blcvoice-audio = { path = "../blcvoice-audio" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18.2", features = ["pipewire", "pulseaudio"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = "0.18.2"
+
+[lints]
+workspace = true
