@@ -46,6 +46,9 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Test platform-independent core
         run: cargo +1.98.0 test --locked -p blcvoice-core -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-shortcuts --all-targets
+      - name: Check desktop native integration
+        if: runner.os != 'Linux'
+        run: cargo +1.98.0 check --locked -p blcvoice-desktop --all-targets
 
   quality:
     name: Rust quality
