@@ -1,0 +1,9 @@
+# Default ownership
+* @BLCCoreStudio
+
+# High-impact maintenance surfaces
+/.github/ @BLCCoreStudio
+/Cargo.toml @BLCCoreStudio
+/Cargo.lock @BLCCoreStudio
+/apps/desktop/ @BLCCoreStudio
+/crates/ @BLCCoreStudio
