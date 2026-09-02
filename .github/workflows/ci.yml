@@ -26,7 +26,9 @@ jobs:
           - macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Test platform-independent core
@@ -37,7 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
       - name: Check formatting
@@ -50,7 +54,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Install Tauri Linux prerequisites
         run: |
           sudo apt-get update
@@ -70,21 +76,42 @@ jobs:
         run: cargo +1.98.0 check -p blcvoice-desktop --all-targets
 
   lockfile:
-    name: Generate Cargo lockfile
+    name: Bootstrap Cargo lockfile
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout source branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Resolve dependency graph
         run: cargo +1.98.0 generate-lockfile
       - name: Validate resolved graph
         run: cargo +1.98.0 metadata --locked --no-deps --format-version 1 > /dev/null
-      - name: Upload generated Cargo.lock
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+      - name: Detect lockfile change
+        id: lock
+        shell: bash
+        run: |
+          if git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1 && git diff --quiet -- Cargo.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit initial lockfile to the PR branch
+        if: steps.lock.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "chore: lock Rust dependencies"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Require a committed lockfile outside pull requests
+        if: steps.lock.outputs.changed == 'true' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          echo "Cargo.lock must be committed and up to date." >&2
+          exit 1

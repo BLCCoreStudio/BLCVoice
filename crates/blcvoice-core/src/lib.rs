@@ -149,7 +149,9 @@ impl DictationSession {
                     requires_transform: false,
                 },
             ) => SessionState::Inserting,
-            (SessionState::Transforming, SessionEvent::TransformFinished) => SessionState::Inserting,
+            (SessionState::Transforming, SessionEvent::TransformFinished) => {
+                SessionState::Inserting
+            }
             (SessionState::Inserting, SessionEvent::InsertionDelivered) => SessionState::Completed,
             (state, SessionEvent::Fail(stage)) if !state.is_terminal() => {
                 self.failure_stage = Some(stage);
@@ -192,7 +194,9 @@ mod tests {
         ];
 
         for event in events {
-            session.apply(event).expect("happy-path event must be valid");
+            session
+                .apply(event)
+                .expect("happy-path event must be valid");
         }
 
         assert_eq!(session.state(), SessionState::Completed);
