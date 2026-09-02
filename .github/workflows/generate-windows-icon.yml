@@ -1,0 +1,49 @@
+# Temporary feature-branch helper. Removed before merge.
+name: Generate Windows icon
+
+on:
+  push:
+    branches:
+      - feat/global-shortcut-registration
+
+permissions:
+  contents: write
+
+jobs:
+  generate-icon:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/global-shortcut-registration
+          persist-credentials: true
+      - name: Wrap existing PNG as ICO
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+
+          png_path = Path('apps/desktop/src-tauri/icons/icon.png')
+          ico_path = Path('apps/desktop/src-tauri/icons/icon.ico')
+          png = png_path.read_bytes()
+          if png[:8] != b'\x89PNG\r\n\x1a\n' or png[12:16] != b'IHDR':
+              raise SystemExit('icon.png is not a valid PNG with IHDR')
+          width, height = struct.unpack('>II', png[16:24])
+          if width > 256 or height > 256:
+              raise SystemExit(f'PNG dimensions {width}x{height} exceed single-image ICO limits')
+          w = 0 if width == 256 else width
+          h = 0 if height == 256 else height
+          header = struct.pack('<HHH', 0, 1, 1)
+          entry = struct.pack('<BBBBHHII', w, h, 0, 0, 1, 32, len(png), 22)
+          ico_path.write_bytes(header + entry + png)
+          print(f'generated {ico_path} from {width}x{height} PNG ({len(png)} bytes)')
+          PY
+      - name: Commit generated ICO
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/src-tauri/icons/icon.ico
+          git commit -m "fix: add Windows application icon"
+          git push origin HEAD:feat/global-shortcut-registration
