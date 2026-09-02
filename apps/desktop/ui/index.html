@@ -4,36 +4,111 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="BLCVoice microphone setup and capture test" />
     <title>BLCVoice</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
   </head>
   <body>
     <main class="shell">
-      <div class="eyebrow">PRE-ALPHA FOUNDATION</div>
-      <h1>BLCVoice</h1>
-      <p class="lead">Fast, private voice dictation for the places you already type.</p>
+      <header class="app-header">
+        <div>
+          <div class="eyebrow">BLCVOICE · PRE-ALPHA</div>
+          <h1>Microphone setup</h1>
+          <p class="lead">
+            Choose the input BLCVoice should use and verify that native capture works cleanly on this machine.
+          </p>
+        </div>
+        <span class="privacy-badge">Local capture</span>
+      </header>
 
-      <section class="status" aria-labelledby="foundation-status">
-        <h2 id="foundation-status">Foundation status</h2>
-        <dl>
+      <section class="panel" aria-labelledby="input-heading">
+        <div class="panel-heading">
           <div>
-            <dt>Native shell</dt>
-            <dd>Ready</dd>
+            <p class="step-label">01 · INPUT</p>
+            <h2 id="input-heading">Select a microphone</h2>
+          </div>
+          <button id="refresh-devices" class="button secondary compact" type="button">Refresh</button>
+        </div>
+
+        <label class="field-label" for="device-select">Input device</label>
+        <select id="device-select" class="select" disabled>
+          <option>Discovering microphones…</option>
+        </select>
+
+        <dl id="device-details" class="device-details" aria-live="polite">
+          <div>
+            <dt>Backend</dt>
+            <dd id="device-backend">—</dd>
           </div>
           <div>
-            <dt>Core lifecycle</dt>
-            <dd>Implemented</dd>
+            <dt>Native format</dt>
+            <dd id="device-format">—</dd>
           </div>
           <div>
-            <dt>Audio / ASR / insertion</dt>
-            <dd>Not implemented yet</dd>
+            <dt>Default</dt>
+            <dd id="device-default">—</dd>
           </div>
         </dl>
+
+        <div id="discovery-message" class="message muted" role="status" aria-live="polite"></div>
       </section>
 
-      <p class="note">
-        This build establishes the application boundary and dictation session lifecycle. It is not yet a usable dictation release.
-      </p>
+      <section class="panel" aria-labelledby="test-heading">
+        <div class="panel-heading test-heading">
+          <div>
+            <p class="step-label">02 · VERIFY</p>
+            <h2 id="test-heading">Test native capture</h2>
+          </div>
+          <span id="test-state" class="state-pill idle">Ready</span>
+        </div>
+
+        <p id="test-instruction" class="panel-copy">
+          Start the test and speak normally. BLCVoice will capture for up to 10 seconds, validate the stream, then discard the audio.
+        </p>
+
+        <div id="test-progress-wrap" class="test-progress-wrap" hidden>
+          <div class="progress-meta">
+            <span>Capturing locally</span>
+            <strong id="test-timer">0.0s</strong>
+          </div>
+          <progress id="test-progress" max="10" value="0">0%</progress>
+        </div>
+
+        <div class="actions">
+          <button id="start-test" class="button primary" type="button" disabled>Start microphone test</button>
+          <button id="finish-test" class="button primary" type="button" hidden>Finish test</button>
+          <button id="cancel-test" class="button secondary" type="button" hidden>Cancel</button>
+        </div>
+
+        <div id="result-card" class="result-card" hidden aria-live="polite">
+          <div class="result-title-row">
+            <strong id="result-title">Capture result</strong>
+            <span id="result-badge" class="result-badge">—</span>
+          </div>
+          <p id="result-summary"></p>
+          <dl class="result-stats">
+            <div>
+              <dt>Frames</dt>
+              <dd id="result-frames">—</dd>
+            </div>
+            <div>
+              <dt>Dropped</dt>
+              <dd id="result-dropped">—</dd>
+            </div>
+            <div>
+              <dt>Callback errors</dt>
+              <dd id="result-errors">—</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div id="error-message" class="message error" role="alert" hidden></div>
+      </section>
+
+      <footer class="footer-note">
+        Raw microphone samples stay on the Rust side of the desktop process. This screen receives only device metadata, session state and final diagnostics.
+      </footer>
     </main>
   </body>
 </html>
