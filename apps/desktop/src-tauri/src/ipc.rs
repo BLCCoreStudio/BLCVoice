@@ -1,5 +1,7 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use blcvoice_asr::RecognitionOptions;
 use blcvoice_audio::{
     AudioDeviceId, AudioFailure, AudioFailureKind, AudioSampleFormat, AudioStreamConfig,
     CaptureStats, InputCaptureFactory, InputDeviceDiscovery, InputDeviceInfo, InputDiscovery,
@@ -13,9 +15,14 @@ use crate::capture::{
     DesktopCaptureError, DesktopCaptureErrorKind, DesktopCaptureService, MicrophoneTestReport,
     session_state_name,
 };
+use crate::dictation::{
+    DesktopDictationError, DesktopDictationErrorKind, DesktopDictationReport,
+    DesktopDictationRequest, DesktopDictationService,
+};
 
 pub struct DesktopState {
     capture: Arc<DesktopCaptureService>,
+    dictation: Arc<DesktopDictationService>,
 }
 
 impl DesktopState {
@@ -23,9 +30,9 @@ impl DesktopState {
     pub fn production() -> Self {
         let discovery: Arc<dyn InputDeviceDiscovery> = Arc::new(CpalInputDeviceDiscovery);
         let capture_factory: Arc<dyn InputCaptureFactory> = Arc::new(CpalInputCaptureFactory);
-        Self {
-            capture: Arc::new(DesktopCaptureService::new(discovery, capture_factory)),
-        }
+        let capture = Arc::new(DesktopCaptureService::new(discovery, capture_factory));
+        let dictation = Arc::new(DesktopDictationService::production(Arc::clone(&capture)));
+        Self { capture, dictation }
     }
 }
 
@@ -63,11 +70,30 @@ impl From<DesktopCaptureError> for CommandErrorDto {
     }
 }
 
+impl From<DesktopDictationError> for CommandErrorDto {
+    fn from(error: DesktopDictationError) -> Self {
+        let code = match error.kind() {
+            DesktopDictationErrorKind::Busy => "dictation_busy",
+            DesktopDictationErrorKind::InvalidConfiguration => "dictation_invalid_configuration",
+            DesktopDictationErrorKind::StaleSession => "stale_session",
+            DesktopDictationErrorKind::RecognizerLoad => "recognizer_load_failed",
+            DesktopDictationErrorKind::Capture => "dictation_capture_failed",
+            DesktopDictationErrorKind::Transcription => "dictation_transcription_failed",
+        };
+        Self {
+            code,
+            message: error.message().to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopStatusDto {
     session: Option<SessionDto>,
     last_pump_failure: Option<String>,
+    dictation_state: &'static str,
+    dictation_session_id: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -200,6 +226,42 @@ impl From<MicrophoneTestReport> for MicrophoneTestReportDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DictationReportDto {
+    session_id: u64,
+    state: &'static str,
+    text: String,
+    raw_text: Option<String>,
+    detected_language: Option<String>,
+    engine_id: String,
+    model_id: String,
+    backend_name: String,
+    source_frames: usize,
+    asr_frames: usize,
+    capture_stats: CaptureStatsDto,
+}
+
+impl From<DesktopDictationReport> for DictationReportDto {
+    fn from(report: DesktopDictationReport) -> Self {
+        let capture = report.transcription.capture;
+        let transcription = capture.transcription;
+        Self {
+            session_id: report.transcription.session.id.get(),
+            state: session_state_name(report.transcription.session.state),
+            text: transcription.text,
+            raw_text: transcription.raw_text,
+            detected_language: transcription.detected_language,
+            engine_id: report.engine_id,
+            model_id: report.model_id,
+            backend_name: report.backend_name,
+            source_frames: capture.source_frames,
+            asr_frames: capture.asr_frames,
+            capture_stats: CaptureStatsDto::from(capture.capture_stats),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CaptureStatsDto {
     received_samples: u64,
     dropped_samples: u64,
@@ -225,7 +287,7 @@ pub async fn audio_input_discovery(
     state: State<'_, DesktopState>,
 ) -> Result<InputDiscoveryDto, CommandErrorDto> {
     let capture = Arc::clone(&state.capture);
-    run_blocking(move || Ok(InputDiscoveryDto::from(capture.discover_input_devices()))).await
+    run_capture_blocking(move || Ok(InputDiscoveryDto::from(capture.discover_input_devices()))).await
 }
 
 #[tauri::command]
@@ -234,7 +296,7 @@ pub async fn microphone_test_start(
     device_id: String,
 ) -> Result<SessionDto, CommandErrorDto> {
     let capture = Arc::clone(&state.capture);
-    run_blocking(move || {
+    run_capture_blocking(move || {
         let device_id = AudioDeviceId::new(device_id).map_err(|error| {
             DesktopCaptureError::new(DesktopCaptureErrorKind::InvalidDevice, error.to_string())
         })?;
@@ -251,7 +313,7 @@ pub async fn microphone_test_finish(
     session_id: u64,
 ) -> Result<MicrophoneTestReportDto, CommandErrorDto> {
     let capture = Arc::clone(&state.capture);
-    run_blocking(move || {
+    run_capture_blocking(move || {
         capture
             .finish_microphone_test(SessionId::new(session_id))
             .map(MicrophoneTestReportDto::from)
@@ -265,9 +327,65 @@ pub async fn microphone_test_cancel(
     session_id: u64,
 ) -> Result<SessionDto, CommandErrorDto> {
     let capture = Arc::clone(&state.capture);
-    run_blocking(move || {
+    run_capture_blocking(move || {
         capture
             .cancel_microphone_test(SessionId::new(session_id))
+            .map(SessionDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dictation_start(
+    state: State<'_, DesktopState>,
+    device_id: String,
+    model_path: String,
+    language_hint: Option<String>,
+) -> Result<SessionDto, CommandErrorDto> {
+    let dictation = Arc::clone(&state.dictation);
+    run_dictation_blocking(move || {
+        let device_id = AudioDeviceId::new(device_id).map_err(|error| {
+            DesktopDictationError::new(
+                DesktopDictationErrorKind::InvalidConfiguration,
+                error.to_string(),
+            )
+        })?;
+        let mut recognition = RecognitionOptions::default();
+        recognition.language_hint = language_hint;
+        dictation
+            .start(DesktopDictationRequest {
+                device_id,
+                model_path: PathBuf::from(model_path),
+                recognition,
+            })
+            .map(SessionDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dictation_finish(
+    state: State<'_, DesktopState>,
+    session_id: u64,
+) -> Result<DictationReportDto, CommandErrorDto> {
+    let dictation = Arc::clone(&state.dictation);
+    run_dictation_blocking(move || {
+        dictation
+            .finish(SessionId::new(session_id))
+            .map(DictationReportDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dictation_cancel(
+    state: State<'_, DesktopState>,
+    session_id: u64,
+) -> Result<SessionDto, CommandErrorDto> {
+    let dictation = Arc::clone(&state.dictation);
+    run_dictation_blocking(move || {
+        dictation
+            .cancel(SessionId::new(session_id))
             .map(SessionDto::from)
     })
     .await
@@ -278,13 +396,28 @@ pub fn desktop_status(state: State<'_, DesktopState>) -> DesktopStatusDto {
     DesktopStatusDto {
         session: state.capture.current_session().map(SessionDto::from),
         last_pump_failure: state.capture.last_pump_failure(),
+        dictation_state: state.dictation.state_name(),
+        dictation_session_id: state.dictation.active_session_id().map(SessionId::get),
     }
 }
 
-async fn run_blocking<T, F>(task: F) -> Result<T, CommandErrorDto>
+async fn run_capture_blocking<T, F>(task: F) -> Result<T, CommandErrorDto>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, DesktopCaptureError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| {
+            CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
+        })?
+        .map_err(CommandErrorDto::from)
+}
+
+async fn run_dictation_blocking<T, F>(task: F) -> Result<T, CommandErrorDto>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, DesktopDictationError> + Send + 'static,
 {
     tauri::async_runtime::spawn_blocking(task)
         .await
