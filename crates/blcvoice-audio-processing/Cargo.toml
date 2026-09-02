@@ -1,0 +1,16 @@
+[package]
+name = "blcvoice-audio-processing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Engine-driven audio preprocessing for BLCVoice"
+
+[dependencies]
+blcvoice-audio = { path = "../blcvoice-audio" }
+audioadapter-buffers = "5.1.0"
+rubato = "5.0.0"
+
+[lints]
+workspace = true
