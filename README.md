@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Runtime-independent global-shortcut semantics and capability-driven backend resolution are also defined and tested. Platform shortcut registration, model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Runtime-independent global-shortcut semantics and capability-driven backend resolution are also defined and tested, and the desktop host can report which shortcut backend is appropriate for the current environment without claiming that registration has succeeded. Platform shortcut registration, model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
 
 ## Product principles
 
