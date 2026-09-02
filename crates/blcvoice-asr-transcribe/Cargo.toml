@@ -1,0 +1,23 @@
+[package]
+name = "blcvoice-asr-transcribe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "transcribe.cpp speech recognition adapter for BLCVoice"
+
+[features]
+default = []
+metal = ["transcribe-cpp/metal"]
+vulkan = ["transcribe-cpp/vulkan"]
+cuda = ["transcribe-cpp/cuda"]
+rocm = ["transcribe-cpp/rocm"]
+openmp = ["transcribe-cpp/openmp"]
+
+[dependencies]
+blcvoice-asr = { path = "../blcvoice-asr" }
+transcribe-cpp = { version = "0.2.3", default-features = false }
+
+[lints]
+workspace = true
