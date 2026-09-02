@@ -3,6 +3,12 @@
 use std::error::Error;
 use std::fmt;
 
+mod coordinator;
+
+pub use coordinator::{
+    CoordinatedTransition, SessionCoordinator, SessionCoordinatorError, SessionSnapshot,
+};
+
 /// Stable identifier for a single dictation attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SessionId(u64);
