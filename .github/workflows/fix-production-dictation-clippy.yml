@@ -1,0 +1,113 @@
+# Temporary feature-branch helper. Removed before merge.
+name: Fix production dictation clippy
+
+on:
+  push:
+    branches:
+      - feat/production-dictation-service
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/production-dictation-service
+          persist-credentials: true
+      - name: Apply focused fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          capture = Path('apps/desktop/src-tauri/src/capture.rs')
+          text = capture.read_text()
+          old = '''    pub fn dictation_insertion_delivered(
+              &self,
+              session_id: SessionId,
+          ) -> Result<SessionSnapshot, DesktopCaptureError> {
+              self.runtime
+                  .insertion_delivered(session_id)
+                  .map_err(DesktopCaptureError::from)
+          }
+
+          '''
+          if old not in text:
+              raise SystemExit('capture insertion method not found')
+          capture.write_text(text.replace(old, '', 1))
+
+          dictation = Path('apps/desktop/src-tauri/src/dictation.rs')
+          text = dictation.read_text()
+          old = '''    pub fn insertion_delivered(
+              &self,
+              session_id: SessionId,
+          ) -> Result<SessionSnapshot, DesktopDictationError> {
+              {
+                  let slot = self.lock_slot();
+                  match *slot {
+                      DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => {}
+                      DictationSlot::AwaitingInsertion(active_id) => {
+                          return Err(stale_error(session_id, active_id));
+                      }
+                      _ => return Err(busy_error(slot.state_name())),
+                  }
+              }
+
+              let result = self
+                  .capture
+                  .dictation_insertion_delivered(session_id)
+                  .map_err(map_capture_error);
+              self.reset_to_idle();
+              result
+          }
+
+          '''
+          if old not in text:
+              raise SystemExit('dictation insertion method not found')
+          text = text.replace(old, '', 1)
+          old_test = '''        let completed = service
+              .insertion_delivered(session.id)
+              .expect("insertion acknowledgement must complete lifecycle");
+          assert_eq!(completed.state, blcvoice_core::SessionState::Completed);
+          assert_eq!(service.state_name(), "idle");
+          '''
+          new_test = '''        let cancelled = service
+              .cancel(session.id)
+              .expect("pending insertion dictation must remain cancellable");
+          assert_eq!(cancelled.state, blcvoice_core::SessionState::Cancelled);
+          assert_eq!(service.state_name(), "idle");
+          '''
+          if old_test not in text:
+              raise SystemExit('dictation insertion test block not found')
+          dictation.write_text(text.replace(old_test, new_test, 1))
+
+          ipc = Path('apps/desktop/src-tauri/src/ipc.rs')
+          text = ipc.read_text()
+          old = '''        let mut recognition = RecognitionOptions::default();
+          recognition.language_hint = language_hint;
+          '''
+          new = '''        let recognition = RecognitionOptions {
+              language_hint,
+              ..RecognitionOptions::default()
+          };
+          '''
+          if old not in text:
+              raise SystemExit('RecognitionOptions reassignment not found')
+          ipc.write_text(text.replace(old, new, 1))
+          PY
+      - name: Install Rustfmt
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
+      - name: Format workspace
+        run: cargo +1.98.0 fmt --all
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/src-tauri/src/capture.rs apps/desktop/src-tauri/src/dictation.rs apps/desktop/src-tauri/src/ipc.rs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: align production dictation with current insertion boundary"
+          git push origin HEAD:feat/production-dictation-service
