@@ -5,6 +5,7 @@ use blcvoice_insertion::{
     InsertionErrorKind, InsertionReceipt, TextInserter,
 };
 
+#[cfg(any(target_os = "linux", test))]
 const EI_TEXT_MAX_UTF8_BYTES: usize = 254;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -47,6 +48,7 @@ fn validate_text(text: &str) -> Result<(), InsertionError> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn utf8_chunks(mut text: &str) -> impl Iterator<Item = &str> {
     std::iter::from_fn(move || {
         if text.is_empty() {

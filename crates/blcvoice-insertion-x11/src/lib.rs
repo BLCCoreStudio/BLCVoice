@@ -5,8 +5,11 @@ use blcvoice_insertion::{
     InsertionErrorKind, InsertionReceipt, TextInserter,
 };
 
+#[cfg(any(target_os = "linux", test))]
 const XK_RETURN: u32 = 0xFF0D;
+#[cfg(any(target_os = "linux", test))]
 const XK_TAB: u32 = 0xFF09;
+#[cfg(any(target_os = "linux", test))]
 const UNICODE_KEYSYM_PREFIX: u32 = 0x0100_0000;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -59,6 +62,7 @@ fn validate_text(text: &str) -> Result<(), InsertionError> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn char_to_keysym(character: char) -> u32 {
     match character {
         '\n' | '\r' => XK_RETURN,
@@ -68,6 +72,7 @@ fn char_to_keysym(character: char) -> u32 {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn find_scratch_keycode(
     min_keycode: u8,
     keysyms_per_keycode: usize,
