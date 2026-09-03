@@ -2,6 +2,7 @@
 
 const AUTO_FINISH_MS = 10_000;
 const invoke = window.__TAURI__?.core?.invoke;
+const listen = window.__TAURI__?.event?.listen;
 
 const elements = {
   dictationState: document.getElementById("dictation-state"),
@@ -52,7 +53,9 @@ const state = {
   settings: null,
   models: [],
   dictationSessionId: null,
+  dictationSource: null,
   dictationBusy: false,
+  shortcutLifecycleUnlisten: null,
   modelBusyId: null,
   settingsBusy: false,
   testSessionId: null,
@@ -126,11 +129,16 @@ function dictationReady() {
 
 function updateDictationControls() {
   const active = state.dictationSessionId !== null;
-  elements.dictationToggle.disabled = state.dictationBusy || (!active && !dictationReady());
+  const coordinatorOwned = active && (state.dictationSource === "shortcut" || state.dictationSource === "recovered");
+  elements.dictationToggle.disabled = state.dictationBusy || coordinatorOwned || (!active && !dictationReady());
   elements.dictationToggle.classList.toggle("recording", active);
-  elements.dictationButtonLabel.textContent = active ? "Stop & type" : "Start dictation";
-  elements.dictationCancel.hidden = !active;
-  elements.dictationCancel.disabled = state.dictationBusy;
+  elements.dictationButtonLabel.textContent = coordinatorOwned
+    ? "Recording via shortcut"
+    : active
+      ? "Stop & type"
+      : "Start dictation";
+  elements.dictationCancel.hidden = !active || coordinatorOwned;
+  elements.dictationCancel.disabled = state.dictationBusy || coordinatorOwned;
   elements.startTest.disabled = state.testBusy || Boolean(state.testSessionId) || active || !selectedDevice();
 }
 
@@ -162,6 +170,7 @@ async function startDictation() {
   try {
     const session = await invoke("dictation_start_configured");
     state.dictationSessionId = session.id;
+    state.dictationSource = "ui";
     setPill(elements.dictationState, "Recording", "recording");
     elements.dictationMessage.textContent = "Listening locally. Press the button or Ctrl + Shift + Space when you are done.";
   } catch (error) {
@@ -184,6 +193,7 @@ async function finishDictation() {
   try {
     const report = await invoke("dictation_finish", { sessionId });
     state.dictationSessionId = null;
+    state.dictationSource = null;
     const language = report.detectedLanguage ? report.detectedLanguage.toUpperCase() : "auto";
     showTranscript(report.text, `${language} · ${report.insertionBackend}`);
     elements.recognizerDetail.textContent = report.modelId || "Loaded model";
@@ -195,6 +205,7 @@ async function finishDictation() {
     clearDictationError();
   } catch (error) {
     state.dictationSessionId = null;
+    state.dictationSource = null;
     setPill(elements.dictationState, "Failed", "failed");
     elements.dictationMessage.textContent = "The dictation pipeline stopped before a clean completion.";
     showDictationError(error);
@@ -212,6 +223,7 @@ async function cancelDictation() {
   try {
     await invoke("dictation_cancel", { sessionId });
     state.dictationSessionId = null;
+    state.dictationSource = null;
     setPill(elements.dictationState, "Ready", "idle");
     elements.dictationMessage.textContent = "Dictation was cancelled; captured audio was discarded.";
     clearDictationError();
@@ -589,14 +601,77 @@ async function refreshDiagnostics() {
   }
 }
 
+function handleShortcutLifecycle(event) {
+  const payload = event?.payload;
+  if (!payload || payload.source !== "shortcut") return;
+  if (state.dictationSource === "ui" && state.dictationSessionId !== null) return;
+
+  clearDictationError();
+  switch (payload.state) {
+    case "starting":
+      state.dictationSource = "shortcut";
+      state.dictationSessionId = null;
+      state.dictationBusy = true;
+      setPill(elements.dictationState, "Starting", "working");
+      elements.dictationMessage.textContent = "Global shortcut is preparing the configured local recognizer…";
+      break;
+    case "recording":
+      state.dictationSource = "shortcut";
+      state.dictationSessionId = payload.sessionId ?? null;
+      state.dictationBusy = false;
+      setPill(elements.dictationState, "Recording", "recording");
+      elements.dictationMessage.textContent = "Listening locally. Press Ctrl + Shift + Space again to stop and type.";
+      break;
+    case "finishing":
+      state.dictationSource = "shortcut";
+      state.dictationSessionId = payload.sessionId ?? state.dictationSessionId;
+      state.dictationBusy = true;
+      setPill(elements.dictationState, "Transcribing", "working");
+      elements.dictationMessage.textContent = "Finalizing audio, transcribing locally and delivering text to the focused app…";
+      break;
+    case "completed":
+      state.dictationSource = null;
+      state.dictationSessionId = null;
+      state.dictationBusy = false;
+      if (payload.text) {
+        showTranscript(payload.text, `Shortcut · ${payload.insertionBackend || "insertion backend"}`);
+      }
+      setPill(elements.dictationState, "Ready", "passed");
+      elements.dictationMessage.textContent = "Shortcut dictation completed.";
+      break;
+    case "failed":
+      state.dictationSource = null;
+      state.dictationSessionId = null;
+      state.dictationBusy = false;
+      setPill(elements.dictationState, "Failed", "failed");
+      elements.dictationMessage.textContent = "Shortcut dictation did not complete cleanly.";
+      showDictationError({
+        code: payload.errorCode || "shortcut_dictation_failed",
+        message: payload.message || "Shortcut dictation failed.",
+        recoverableText: payload.recoverableText || null,
+      });
+      break;
+    default:
+      return;
+  }
+  updateDictationControls();
+}
+
+async function subscribeShortcutLifecycle() {
+  if (!listen || state.shortcutLifecycleUnlisten) return;
+  state.shortcutLifecycleUnlisten = await listen("blcvoice://dictation-lifecycle", handleShortcutLifecycle);
+}
+
 async function recoverDesktopStatus() {
   try {
     const status = await invoke("desktop_status");
     if (status.dictationSessionId && status.dictationState === "recording") {
       state.dictationSessionId = status.dictationSessionId;
+      state.dictationSource = "recovered";
       setPill(elements.dictationState, "Recording", "recording");
-      elements.dictationMessage.textContent = "A dictation session was already active.";
+      elements.dictationMessage.textContent = "A dictation session was already active. Use the global shortcut to stop it safely.";
     } else if (status.dictationState === "idle") {
+      state.dictationSource = null;
       setPill(elements.dictationState, "Ready", "idle");
       elements.dictationMessage.textContent = "Press Start dictation or use Ctrl + Shift + Space.";
     }
@@ -625,6 +700,7 @@ async function bootstrap() {
     return;
   }
   try {
+    await subscribeShortcutLifecycle();
     await loadSettings();
     await Promise.all([refreshDevices(), refreshModels(), refreshDiagnostics(), recoverDesktopStatus()]);
   } catch (error) {
