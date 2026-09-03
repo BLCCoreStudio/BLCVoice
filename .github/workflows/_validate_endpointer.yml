@@ -1,0 +1,34 @@
+name: Validate adaptive endpointer
+
+on:
+  push:
+    branches:
+      - feat/adaptive-endpointer
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Refresh lockfile
+        run: cargo +1.98.0 generate-lockfile
+      - name: Format and validate
+        run: |
+          cargo +1.98.0 fmt --all
+          cargo +1.98.0 test --locked -p blcvoice-endpointer --all-targets
+          cargo +1.98.0 clippy --locked -p blcvoice-endpointer --all-targets -- -D warnings
+      - name: Commit generated state
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git add Cargo.lock crates/blcvoice-endpointer/src/lib.rs
+          git diff --cached --quiet || git commit -m "build: lock adaptive endpointer crate"
+          git push
