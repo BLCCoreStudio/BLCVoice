@@ -123,9 +123,9 @@ mod platform {
         }
 
         fn has_resumed_text_device(&self) -> bool {
-            self.devices.iter().any(|slot| {
-                slot.resumed && slot.device.has_capability(DeviceCapability::Text)
-            })
+            self.devices
+                .iter()
+                .any(|slot| slot.resumed && slot.device.has_capability(DeviceCapability::Text))
         }
 
         fn handle_event(
@@ -141,9 +141,9 @@ mod platform {
                     ));
                 }
                 EiEvent::SeatAdded(event) => {
-                    event.seat.bind_capabilities(
-                        DeviceCapability::Keyboard | DeviceCapability::Text,
-                    );
+                    event
+                        .seat
+                        .bind_capabilities(DeviceCapability::Keyboard | DeviceCapability::Text);
                     context.flush().map_err(|error| {
                         backend_failure(format!("failed to bind EIS text capabilities: {error}"))
                     })?;
@@ -195,9 +195,9 @@ mod platform {
         }
 
         fn text_device_index(&self) -> Option<usize> {
-            self.devices.iter().position(|slot| {
-                slot.resumed && slot.device.has_capability(DeviceCapability::Text)
-            })
+            self.devices
+                .iter()
+                .position(|slot| slot.resumed && slot.device.has_capability(DeviceCapability::Text))
         }
 
         fn ensure_emulating(&mut self, index: usize, device: &reis::event::Device) {
@@ -377,7 +377,9 @@ mod platform {
         ready_tx: mpsc::SyncSender<Result<Option<String>, InsertionError>>,
     ) -> Result<(), InsertionError> {
         let remote_desktop = RemoteDesktop::new().await.map_err(|error| {
-            backend_failure(format!("failed to connect to the RemoteDesktop portal: {error}"))
+            backend_failure(format!(
+                "failed to connect to the RemoteDesktop portal: {error}"
+            ))
         })?;
         let session = remote_desktop
             .create_session(CreateSessionOptions::default())
@@ -387,7 +389,7 @@ mod platform {
             })?;
 
         let mut select_options = SelectDevicesOptions::default()
-            .set_devices(PortalDeviceType::Keyboard)
+            .set_devices(enumflags2::BitFlags::from_flag(PortalDeviceType::Keyboard))
             .set_persist_mode(PersistMode::ExplicitlyRevoked);
         if let Some(token) = options.restore_token() {
             select_options = select_options.set_restore_token(token);
@@ -397,14 +399,18 @@ mod platform {
             .select_devices(&session, select_options)
             .await
             .map_err(|error| {
-                backend_failure(format!("failed to request portal keyboard control: {error}"))
+                backend_failure(format!(
+                    "failed to request portal keyboard control: {error}"
+                ))
             })?;
 
         let start_request = remote_desktop
             .start(&session, None, StartOptions::default())
             .await
             .map_err(|error| {
-                backend_failure(format!("failed to start the RemoteDesktop session: {error}"))
+                backend_failure(format!(
+                    "failed to start the RemoteDesktop session: {error}"
+                ))
             })?;
         let start_response = start_request.response().map_err(|error| {
             InsertionError::new(
@@ -435,12 +441,18 @@ mod platform {
         let mut state = EiState::new();
         tokio::time::timeout(DEVICE_READY_TIMEOUT, async {
             while !state.has_resumed_text_device() {
-                let event = events.next().await.ok_or_else(|| {
-                    InsertionError::new(
-                        InsertionErrorKind::BackendUnavailable,
-                        "the EIS event stream closed before a text device became available",
-                    )
-                })??;
+                let event = events
+                    .next()
+                    .await
+                    .ok_or_else(|| {
+                        InsertionError::new(
+                            InsertionErrorKind::BackendUnavailable,
+                            "the EIS event stream closed before a text device became available",
+                        )
+                    })?
+                    .map_err(|error| {
+                        backend_failure(format!("failed to read an EIS readiness event: {error}"))
+                    })?;
                 state.handle_event(event, &context)?;
             }
             Ok::<(), InsertionError>(())
@@ -468,12 +480,16 @@ mod platform {
                     }
                 }
                 event = events.next() => {
-                    let event = event.ok_or_else(|| {
-                        InsertionError::new(
-                            InsertionErrorKind::BackendUnavailable,
-                            "the EIS event stream closed",
-                        )
-                    })??;
+                    let event = event
+              .ok_or_else(|| {
+                  InsertionError::new(
+                      InsertionErrorKind::BackendUnavailable,
+                      "the EIS event stream closed",
+                  )
+              })?
+              .map_err(|error| {
+                  backend_failure(format!("failed to read an EIS event: {error}"))
+              })?;
                     state.handle_event(event, &context)?;
                 }
             }
