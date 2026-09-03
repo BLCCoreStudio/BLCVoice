@@ -210,8 +210,9 @@ fn persist_document(path: &Path, document: &HistoryDocument) -> Result<(), Histo
     let parent = path
         .parent()
         .ok_or_else(|| HistoryError::new("history path has no parent directory"))?;
-    fs::create_dir_all(parent)
-        .map_err(|error| HistoryError::new(format!("could not create history directory: {error}")))?;
+    fs::create_dir_all(parent).map_err(|error| {
+        HistoryError::new(format!("could not create history directory: {error}"))
+    })?;
     let bytes = serde_json::to_vec_pretty(document)
         .map_err(|error| HistoryError::new(format!("could not serialize history: {error}")))?;
     let temp = path.with_extension("json.tmp");
@@ -313,7 +314,10 @@ mod tests {
         }
         let entries = service.entries();
         assert_eq!(entries.len(), MAX_HISTORY_ENTRIES);
-        assert_eq!(entries[0].text, format!("entry-{}", MAX_HISTORY_ENTRIES + 4));
+        assert_eq!(
+            entries[0].text,
+            format!("entry-{}", MAX_HISTORY_ENTRIES + 4)
+        );
         assert_eq!(entries.last().expect("last entry").text, "entry-5");
         let _ = fs::remove_file(path);
     }

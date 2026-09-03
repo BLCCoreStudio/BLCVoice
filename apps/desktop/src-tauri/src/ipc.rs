@@ -20,6 +20,7 @@ use crate::dictation::{
     DesktopDictationError, DesktopDictationErrorKind, DesktopDictationReport,
     DesktopDictationRequest, DesktopDictationService,
 };
+use crate::history::{HistoryEntry, HistoryError, HistoryService, NewHistoryEntry};
 use crate::insertion::DesktopInsertionService;
 use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};
 use crate::settings::{AppSettings, SettingsError, SettingsService};
@@ -28,6 +29,7 @@ pub struct DesktopState {
     capture: Arc<DesktopCaptureService>,
     dictation: Arc<DesktopDictationService>,
     insertion: Arc<DesktopInsertionService>,
+    history: Arc<HistoryService>,
     settings: Arc<SettingsService>,
     models: Arc<ModelManager>,
 }
@@ -41,11 +43,14 @@ impl DesktopState {
         let insertion = Arc::new(DesktopInsertionService::production());
         let settings =
             Arc::new(SettingsService::open(config_dir).map_err(|error| error.to_string())?);
+        let history =
+            Arc::new(HistoryService::open(data_dir.clone()).map_err(|error| error.to_string())?);
         let models = Arc::new(ModelManager::new(data_dir).map_err(|error| error.to_string())?);
         Ok(Self {
             capture,
             dictation,
             insertion,
+            history,
             settings,
             models,
         })
@@ -162,7 +167,20 @@ impl DesktopState {
             .dictation
             .complete_insertion(session_id)
             .map_err(CommandErrorDto::from)?;
-        Ok(DictationReportDto::completed(report, receipt, completed))
+        let dto = DictationReportDto::completed(report, receipt, completed);
+        if let Err(error) = self.history.append(NewHistoryEntry {
+            text: dto.text.clone(),
+            detected_language: dto.detected_language.clone(),
+            engine_id: dto.engine_id.clone(),
+            model_id: dto.model_id.clone(),
+            insertion_backend: dto.insertion_backend.clone(),
+            semantic_delivery_verified: dto.semantic_delivery_verified,
+        }) {
+            eprintln!(
+                "BLCVoice could not persist local history after dictation completion: {error}"
+            );
+        }
+        Ok(dto)
     }
 
     pub(crate) fn cancel_dictation_session(
@@ -252,6 +270,12 @@ impl From<DesktopDictationError> for CommandErrorDto {
             DesktopDictationErrorKind::Insertion => "dictation_insertion_lifecycle_failed",
         };
         Self::plain(code, error.message())
+    }
+}
+
+impl From<HistoryError> for CommandErrorDto {
+    fn from(error: HistoryError) -> Self {
+        Self::plain("history_failed", error.message())
     }
 }
 
@@ -663,6 +687,34 @@ impl ModelStatusDto {
             selected: selected_model_id == Some(status.spec.id()),
         }
     }
+}
+
+#[tauri::command]
+pub fn history_list(state: State<'_, DesktopState>) -> Vec<HistoryEntry> {
+    state.history.entries()
+}
+
+#[tauri::command]
+pub async fn history_delete(
+    state: State<'_, DesktopState>,
+    id: u64,
+) -> Result<bool, CommandErrorDto> {
+    let history = Arc::clone(&state.history);
+    tauri::async_runtime::spawn_blocking(move || history.delete(id).map_err(CommandErrorDto::from))
+        .await
+        .map_err(|error| {
+            CommandErrorDto::blocking_worker(format!("history worker failed: {error}"))
+        })?
+}
+
+#[tauri::command]
+pub async fn history_clear(state: State<'_, DesktopState>) -> Result<(), CommandErrorDto> {
+    let history = Arc::clone(&state.history);
+    tauri::async_runtime::spawn_blocking(move || history.clear().map_err(CommandErrorDto::from))
+        .await
+        .map_err(|error| {
+            CommandErrorDto::blocking_worker(format!("history worker failed: {error}"))
+        })?
 }
 
 #[tauri::command]

@@ -135,6 +135,19 @@
         </div>
       </section>
 
+      <section class="panel history-panel" aria-labelledby="history-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="step-label">LOCAL HISTORY</p>
+            <h2 id="history-heading">Recent dictations</h2>
+          </div>
+          <button id="clear-history" class="button secondary compact" type="button">Clear all</button>
+        </div>
+        <p class="panel-copy">Up to 100 completed transcripts are stored only on this device. Raw microphone audio is never written to history.</p>
+        <div id="history-list" class="history-list" aria-live="polite"></div>
+        <div id="history-message" class="message muted" role="status"></div>
+      </section>
+
       <section class="panel diagnostics-panel" aria-labelledby="diagnostics-heading">
         <div class="panel-heading">
           <div>

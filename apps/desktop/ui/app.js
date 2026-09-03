@@ -46,6 +46,9 @@ const elements = {
   insertionDetail: document.getElementById("insertion-detail"),
   recognizerDetail: document.getElementById("recognizer-detail"),
   recognizerBackend: document.getElementById("recognizer-backend"),
+  historyList: document.getElementById("history-list"),
+  historyMessage: document.getElementById("history-message"),
+  clearHistory: document.getElementById("clear-history"),
 };
 
 const state = {
@@ -63,6 +66,7 @@ const state = {
   testAutoFinishStarted: false,
   shortcutLifecycleUnlisten: null,
   shortcutSessionActive: false,
+  historyBusy: false,
 };
 
 function commandErrorMessage(error) {
@@ -209,6 +213,7 @@ async function finishDictation() {
       ? "Text delivery was verified by the active backend."
       : "The complete transcript was submitted to the operating-system insertion backend.";
     clearDictationError();
+    void refreshHistory();
   } catch (error) {
     state.dictationSessionId = null;
     setPill(elements.dictationState, "Failed", "failed");
@@ -605,6 +610,101 @@ async function refreshDiagnostics() {
   }
 }
 
+function formatHistoryTime(unixMs) {
+  const value = Number(unixMs);
+  if (!Number.isFinite(value)) return "Unknown time";
+  return new Date(value).toLocaleString();
+}
+
+function renderHistory(entries) {
+  elements.historyList.replaceChildren();
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) {
+    elements.historyMessage.textContent = "No completed dictations yet.";
+    elements.clearHistory.disabled = true;
+    return;
+  }
+  elements.historyMessage.textContent = `${list.length} local transcript${list.length === 1 ? "" : "s"}.`;
+  elements.clearHistory.disabled = state.historyBusy;
+  for (const entry of list) {
+    const card = document.createElement("article");
+    card.className = "history-item";
+
+    const top = document.createElement("div");
+    top.className = "history-item-top";
+    const meta = document.createElement("span");
+    const language = entry.detectedLanguage ? entry.detectedLanguage.toUpperCase() : "auto";
+    meta.textContent = `${formatHistoryTime(entry.createdAtUnixMs)} · ${language} · ${entry.insertionBackend}`;
+    top.append(meta);
+
+    const text = document.createElement("p");
+    text.textContent = entry.text;
+
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "button secondary compact";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(entry.text);
+        copy.textContent = "Copied";
+        window.setTimeout(() => { copy.textContent = "Copy"; }, 1000);
+      } catch {
+        copy.textContent = "Unavailable";
+      }
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button danger compact";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => void deleteHistoryEntry(entry.id));
+    actions.append(copy, remove);
+
+    card.append(top, text, actions);
+    elements.historyList.append(card);
+  }
+}
+
+async function refreshHistory() {
+  if (!invoke || state.historyBusy) return;
+  try {
+    renderHistory(await invoke("history_list"));
+  } catch (error) {
+    elements.historyMessage.textContent = commandErrorMessage(error);
+  }
+}
+
+async function deleteHistoryEntry(id) {
+  if (!invoke || state.historyBusy) return;
+  state.historyBusy = true;
+  elements.clearHistory.disabled = true;
+  try {
+    await invoke("history_delete", { id });
+    renderHistory(await invoke("history_list"));
+  } catch (error) {
+    elements.historyMessage.textContent = commandErrorMessage(error);
+  } finally {
+    state.historyBusy = false;
+    elements.clearHistory.disabled = false;
+  }
+}
+
+async function clearHistory() {
+  if (!invoke || state.historyBusy) return;
+  state.historyBusy = true;
+  elements.clearHistory.disabled = true;
+  try {
+    await invoke("history_clear");
+    renderHistory([]);
+  } catch (error) {
+    elements.historyMessage.textContent = commandErrorMessage(error);
+  } finally {
+    state.historyBusy = false;
+  }
+}
+
 function applyShortcutLifecycle(payload) {
   if (!payload || payload.source !== "shortcut") return;
 
@@ -642,6 +742,7 @@ function applyShortcutLifecycle(payload) {
       }
       setPill(elements.dictationState, "Ready", "passed");
       elements.dictationMessage.textContent = "Shortcut dictation completed and the transcript was submitted to the active insertion backend.";
+      void refreshHistory();
       break;
     case "failed":
       state.shortcutSessionActive = false;
@@ -714,7 +815,7 @@ async function bootstrap() {
   try {
     await subscribeShortcutLifecycle();
     await loadSettings();
-    await Promise.all([refreshDevices(), refreshModels(), refreshDiagnostics(), recoverDesktopStatus()]);
+    await Promise.all([refreshDevices(), refreshModels(), refreshDiagnostics(), refreshHistory(), recoverDesktopStatus()]);
   } catch (error) {
     showDictationError(error);
   }
@@ -731,6 +832,7 @@ elements.startTest.addEventListener("click", () => void startTest());
 elements.finishTest.addEventListener("click", () => void finishTest(false));
 elements.cancelTest.addEventListener("click", () => void cancelTest());
 elements.refreshDiagnostics.addEventListener("click", () => void refreshDiagnostics());
+elements.clearHistory.addEventListener("click", () => void clearHistory());
 window.addEventListener("beforeunload", () => {
   if (state.shortcutLifecycleUnlisten) {
     state.shortcutLifecycleUnlisten();

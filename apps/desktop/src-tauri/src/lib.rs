@@ -3,6 +3,7 @@
 mod capture;
 mod coordinator;
 mod dictation;
+mod history;
 mod insertion;
 mod ipc;
 mod models;
@@ -12,9 +13,10 @@ mod shortcut;
 use coordinator::ShortcutDictationCoordinator;
 use ipc::{
     DesktopState, audio_input_discovery, desktop_status, dictation_cancel, dictation_finish,
-    dictation_start, dictation_start_configured, insertion_capability, microphone_test_cancel,
-    microphone_test_finish, microphone_test_start, model_catalog, model_install, model_remove,
-    settings_get, settings_set_input_device, settings_set_language_hint, settings_set_model,
+    dictation_start, dictation_start_configured, history_clear, history_delete, history_list,
+    insertion_capability, microphone_test_cancel, microphone_test_finish, microphone_test_start,
+    model_catalog, model_install, model_remove, settings_get, settings_set_input_device,
+    settings_set_language_hint, settings_set_model,
 };
 use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};
 use tauri::menu::{Menu, MenuItem};
@@ -92,6 +94,9 @@ pub fn run() {
             dictation_finish,
             dictation_cancel,
             insertion_capability,
+            history_list,
+            history_delete,
+            history_clear,
             settings_get,
             settings_set_input_device,
             settings_set_model,

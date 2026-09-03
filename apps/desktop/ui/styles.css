@@ -125,6 +125,12 @@ progress { display: block; width: 100%; height: 7px; border: 0; }
 .result-card p { margin: 8px 0 0; color: var(--muted); font-size: .82rem; }
 .result-stats { margin-top: 12px; }
 
+.history-list { display: grid; gap: 9px; }
+.history-item { padding: 13px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-strong); }
+.history-item-top { color: var(--muted); font-size: .69rem; font-weight: 650; }
+.history-item p { margin: 8px 0 10px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; white-space: pre-wrap; }
+.history-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+
 .diagnostic-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
 .diagnostic-item { min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-strong); }
 .diagnostic-item span, .diagnostic-item strong, .diagnostic-item small { display: block; }
