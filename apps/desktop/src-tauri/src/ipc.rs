@@ -8,6 +8,7 @@ use blcvoice_audio::{
 };
 use blcvoice_audio_cpal::{CpalInputCaptureFactory, CpalInputDeviceDiscovery};
 use blcvoice_core::{SessionId, SessionSnapshot};
+use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};
 use serde::Serialize;
 use tauri::State;
 
@@ -19,10 +20,12 @@ use crate::dictation::{
     DesktopDictationError, DesktopDictationErrorKind, DesktopDictationReport,
     DesktopDictationRequest, DesktopDictationService,
 };
+use crate::insertion::DesktopInsertionService;
 
 pub struct DesktopState {
     capture: Arc<DesktopCaptureService>,
     dictation: Arc<DesktopDictationService>,
+    insertion: Arc<DesktopInsertionService>,
 }
 
 impl DesktopState {
@@ -32,7 +35,12 @@ impl DesktopState {
         let capture_factory: Arc<dyn InputCaptureFactory> = Arc::new(CpalInputCaptureFactory);
         let capture = Arc::new(DesktopCaptureService::new(discovery, capture_factory));
         let dictation = Arc::new(DesktopDictationService::production(Arc::clone(&capture)));
-        Self { capture, dictation }
+        let insertion = Arc::new(DesktopInsertionService::production());
+        Self {
+            capture,
+            dictation,
+            insertion,
+        }
     }
 }
 
@@ -41,13 +49,35 @@ impl DesktopState {
 pub struct CommandErrorDto {
     code: &'static str,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recoverable_text: Option<String>,
 }
 
 impl CommandErrorDto {
-    fn blocking_worker(message: impl Into<String>) -> Self {
+    fn plain(code: &'static str, message: impl Into<String>) -> Self {
         Self {
-            code: "blocking_worker_failed",
+            code,
             message: message.into(),
+            recoverable_text: None,
+        }
+    }
+
+    fn blocking_worker(message: impl Into<String>) -> Self {
+        Self::plain("blocking_worker_failed", message)
+    }
+
+    fn insertion(error: InsertionError, recoverable_text: String) -> Self {
+        let code = match error.kind() {
+            InsertionErrorKind::InvalidText => "insertion_invalid_text",
+            InsertionErrorKind::PermissionDenied => "insertion_permission_denied",
+            InsertionErrorKind::BackendUnavailable => "insertion_backend_unavailable",
+            InsertionErrorKind::PartialSubmission => "insertion_partial_submission",
+            InsertionErrorKind::BackendFailure => "insertion_backend_failed",
+        };
+        Self {
+            code,
+            message: error.message().to_owned(),
+            recoverable_text: Some(recoverable_text),
         }
     }
 }
@@ -63,10 +93,7 @@ impl From<DesktopCaptureError> for CommandErrorDto {
             DesktopCaptureErrorKind::WorkerJoin => "capture_worker_join_failed",
             DesktopCaptureErrorKind::Runtime => "dictation_runtime_failed",
         };
-        Self {
-            code,
-            message: error.message().to_owned(),
-        }
+        Self::plain(code, error.message())
     }
 }
 
@@ -79,11 +106,9 @@ impl From<DesktopDictationError> for CommandErrorDto {
             DesktopDictationErrorKind::RecognizerLoad => "recognizer_load_failed",
             DesktopDictationErrorKind::Capture => "dictation_capture_failed",
             DesktopDictationErrorKind::Transcription => "dictation_transcription_failed",
+            DesktopDictationErrorKind::Insertion => "dictation_insertion_lifecycle_failed",
         };
-        Self {
-            code,
-            message: error.message().to_owned(),
-        }
+        Self::plain(code, error.message())
     }
 }
 
@@ -94,6 +119,38 @@ pub struct DesktopStatusDto {
     last_pump_failure: Option<String>,
     dictation_state: &'static str,
     dictation_session_id: Option<u64>,
+    insertion: InsertionCapabilityDto,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertionCapabilityDto {
+    backend: Option<String>,
+    authorization: Option<String>,
+    semantic_delivery_verifiable: bool,
+    available: bool,
+    error: Option<String>,
+}
+
+impl InsertionCapabilityDto {
+    fn from_service(service: &DesktopInsertionService) -> Self {
+        match service.capability() {
+            Ok(capability) => Self {
+                backend: Some(capability.backend().to_string()),
+                authorization: Some(capability.authorization().to_string()),
+                semantic_delivery_verifiable: capability.semantic_delivery_verifiable(),
+                available: true,
+                error: None,
+            },
+            Err(error) => Self {
+                backend: None,
+                authorization: None,
+                semantic_delivery_verifiable: false,
+                available: false,
+                error: Some(error.to_string()),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -238,15 +295,22 @@ pub struct DictationReportDto {
     source_frames: usize,
     asr_frames: usize,
     capture_stats: CaptureStatsDto,
+    insertion_backend: String,
+    submitted_utf8_bytes: usize,
+    semantic_delivery_verified: bool,
 }
 
-impl From<DesktopDictationReport> for DictationReportDto {
-    fn from(report: DesktopDictationReport) -> Self {
+impl DictationReportDto {
+    fn completed(
+        report: DesktopDictationReport,
+        receipt: InsertionReceipt,
+        completed: SessionSnapshot,
+    ) -> Self {
         let capture = report.transcription.capture;
         let transcription = capture.transcription;
         Self {
-            session_id: report.transcription.session.id.get(),
-            state: session_state_name(report.transcription.session.state),
+            session_id: completed.id.get(),
+            state: session_state_name(completed.state),
             text: transcription.text,
             raw_text: transcription.raw_text,
             detected_language: transcription.detected_language,
@@ -256,6 +320,9 @@ impl From<DesktopDictationReport> for DictationReportDto {
             source_frames: capture.source_frames,
             asr_frames: capture.asr_frames,
             capture_stats: CaptureStatsDto::from(capture.capture_stats),
+            insertion_backend: receipt.backend().to_string(),
+            submitted_utf8_bytes: receipt.submitted_utf8_bytes(),
+            semantic_delivery_verified: receipt.semantic_delivery_verified(),
         }
     }
 }
@@ -372,12 +439,39 @@ pub async fn dictation_finish(
     session_id: u64,
 ) -> Result<DictationReportDto, CommandErrorDto> {
     let dictation = Arc::clone(&state.dictation);
-    run_dictation_blocking(move || {
+    let insertion = Arc::clone(&state.insertion);
+    tauri::async_runtime::spawn_blocking(move || {
+        let session_id = SessionId::new(session_id);
+        let report = dictation.finish(session_id).map_err(CommandErrorDto::from)?;
+        let text = report.transcription.capture.transcription.text.clone();
         dictation
-            .finish(SessionId::new(session_id))
-            .map(DictationReportDto::from)
+            .begin_insertion(session_id)
+            .map_err(CommandErrorDto::from)?;
+
+        let receipt = match insertion.insert_text(&text) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let lifecycle_failure = dictation.fail_insertion(session_id).err();
+                let mut dto = CommandErrorDto::insertion(error, text);
+                if let Some(lifecycle_failure) = lifecycle_failure {
+                    dto.message = format!(
+                        "{}; additionally, insertion failure could not be committed to the lifecycle: {}",
+                        dto.message, lifecycle_failure
+                    );
+                }
+                return Err(dto);
+            }
+        };
+
+        let completed = dictation
+            .complete_insertion(session_id)
+            .map_err(CommandErrorDto::from)?;
+        Ok(DictationReportDto::completed(report, receipt, completed))
     })
     .await
+    .map_err(|error| {
+        CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
+    })?
 }
 
 #[tauri::command]
@@ -395,12 +489,18 @@ pub async fn dictation_cancel(
 }
 
 #[tauri::command]
+pub fn insertion_capability(state: State<'_, DesktopState>) -> InsertionCapabilityDto {
+    InsertionCapabilityDto::from_service(&state.insertion)
+}
+
+#[tauri::command]
 pub fn desktop_status(state: State<'_, DesktopState>) -> DesktopStatusDto {
     DesktopStatusDto {
         session: state.capture.current_session().map(SessionDto::from),
         last_pump_failure: state.capture.last_pump_failure(),
         dictation_state: state.dictation.state_name(),
         dictation_session_id: state.dictation.active_session_id().map(SessionId::get),
+        insertion: InsertionCapabilityDto::from_service(&state.insertion),
     }
 }
 
