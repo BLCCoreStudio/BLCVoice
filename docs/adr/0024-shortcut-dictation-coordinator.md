@@ -50,5 +50,6 @@ If insertion fails, the lifecycle event can include recoverable transcript text 
 - Global dictation can run without the webview owning the session.
 - Shortcut behavior and button-driven dictation use the same configured services and lifecycle semantics.
 - The UI becomes a projection of backend state rather than an orchestration dependency.
+- Desktop status exposes shortcut coordinator ownership so a reloaded webview can recover state without guessing whether it owns the active session.
 - Start/stop races during recognizer preparation are explicit and testable.
 - Direct UI sessions and shortcut-owned sessions are still separate control entry points; a future unified command coordinator may consolidate them if cross-control cancellation becomes a product requirement.

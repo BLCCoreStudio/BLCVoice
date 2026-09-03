@@ -16,6 +16,7 @@ use crate::capture::{
     DesktopCaptureError, DesktopCaptureErrorKind, DesktopCaptureService, MicrophoneTestReport,
     session_state_name,
 };
+use crate::coordinator::ShortcutDictationCoordinator;
 use crate::dictation::{
     DesktopDictationError, DesktopDictationErrorKind, DesktopDictationReport,
     DesktopDictationRequest, DesktopDictationService,
@@ -282,6 +283,8 @@ pub struct DesktopStatusDto {
     last_pump_failure: Option<String>,
     dictation_state: &'static str,
     dictation_session_id: Option<u64>,
+    shortcut_dictation_state: &'static str,
+    shortcut_dictation_session_id: Option<u64>,
     insertion: InsertionCapabilityDto,
 }
 
@@ -806,12 +809,18 @@ pub fn insertion_capability(state: State<'_, DesktopState>) -> InsertionCapabili
 }
 
 #[tauri::command]
-pub fn desktop_status(state: State<'_, DesktopState>) -> DesktopStatusDto {
+pub fn desktop_status(
+    state: State<'_, DesktopState>,
+    shortcut: State<'_, ShortcutDictationCoordinator>,
+) -> DesktopStatusDto {
+    let (shortcut_dictation_state, shortcut_dictation_session_id) = shortcut.status();
     DesktopStatusDto {
         session: state.capture.current_session().map(SessionDto::from),
         last_pump_failure: state.capture.last_pump_failure(),
         dictation_state: state.dictation.state_name(),
         dictation_session_id: state.dictation.active_session_id().map(SessionId::get),
+        shortcut_dictation_state,
+        shortcut_dictation_session_id: shortcut_dictation_session_id.map(SessionId::get),
         insertion: InsertionCapabilityDto::from_service(&state.insertion),
     }
 }

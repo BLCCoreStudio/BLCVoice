@@ -181,6 +181,15 @@ impl ShortcutDictationCoordinator {
         *self.lock_state() = CoordinatorState::Idle;
     }
 
+    pub(crate) fn status(&self) -> (&'static str, Option<SessionId>) {
+        match *self.lock_state() {
+            CoordinatorState::Idle => ("idle", None),
+            CoordinatorState::Starting { .. } => ("starting", None),
+            CoordinatorState::Recording(session_id) => ("recording", Some(session_id)),
+            CoordinatorState::Finishing(session_id) => ("finishing", Some(session_id)),
+        }
+    }
+
     fn lock_state(&self) -> MutexGuard<'_, CoordinatorState> {
         self.state
             .lock()
@@ -351,6 +360,24 @@ mod tests {
             *coordinator.lock_state(),
             CoordinatorState::Recording(session_id)
         );
+    }
+
+    #[test]
+    fn status_reports_shortcut_ownership_without_exposing_mutable_state() {
+        let coordinator = ShortcutDictationCoordinator::default();
+        assert_eq!(coordinator.status(), ("idle", None));
+
+        *coordinator.lock_state() = CoordinatorState::Starting {
+            stop_requested: false,
+        };
+        assert_eq!(coordinator.status(), ("starting", None));
+
+        let session_id = SessionId::new(7);
+        *coordinator.lock_state() = CoordinatorState::Recording(session_id);
+        assert_eq!(coordinator.status(), ("recording", Some(session_id)));
+
+        *coordinator.lock_state() = CoordinatorState::Finishing(session_id);
+        assert_eq!(coordinator.status(), ("finishing", Some(session_id)));
     }
 
     #[test]
