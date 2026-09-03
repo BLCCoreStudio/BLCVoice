@@ -239,7 +239,11 @@ impl AdaptiveEndpointer {
     }
 }
 
-fn checked_add_ms(current: u32, additional: u32, message: &'static str) -> Result<u32, EndpointerError> {
+fn checked_add_ms(
+    current: u32,
+    additional: u32,
+    message: &'static str,
+) -> Result<u32, EndpointerError> {
     current
         .checked_add(additional)
         .ok_or(EndpointerError::InvalidObservation(message))
@@ -340,10 +344,10 @@ mod tests {
             ..AdaptiveEndpointerConfig::default()
         })
         .unwrap();
-        endpointer.observe(observation(-42.0, 100)).unwrap();
+        endpointer.observe(observation(-50.0, 100)).unwrap();
         let snapshot = endpointer.snapshot();
-        assert_eq!(snapshot.noise_floor_dbfs, -42.0);
-        assert_eq!(snapshot.start_threshold_dbfs, -30.0);
+        assert_eq!(snapshot.noise_floor_dbfs, -50.0);
+        assert_eq!(snapshot.start_threshold_dbfs, -38.0);
     }
 
     #[test]
