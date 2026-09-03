@@ -24,6 +24,11 @@ blcvoice-asr-transcribe = { path = "../../../crates/blcvoice-asr-transcribe" }
 blcvoice-audio = { path = "../../../crates/blcvoice-audio" }
 blcvoice-audio-cpal = { path = "../../../crates/blcvoice-audio-cpal" }
 blcvoice-core = { path = "../../../crates/blcvoice-core" }
+blcvoice-insertion = { path = "../../../crates/blcvoice-insertion" }
+blcvoice-insertion-eis = { path = "../../../crates/blcvoice-insertion-eis" }
+blcvoice-insertion-native = { path = "../../../crates/blcvoice-insertion-native" }
+blcvoice-insertion-x11 = { path = "../../../crates/blcvoice-insertion-x11" }
+blcvoice-platform = { path = "../../../crates/blcvoice-platform" }
 blcvoice-runtime = { path = "../../../crates/blcvoice-runtime" }
 blcvoice-shortcuts = { path = "../../../crates/blcvoice-shortcuts" }
 serde = { version = "1", features = ["derive"] }
