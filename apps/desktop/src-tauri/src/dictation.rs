@@ -1,8 +1,10 @@
 use std::error::Error;
 use std::fmt;
+use std::fs;
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::SystemTime;
 
 use blcvoice_asr::{RecognitionError, RecognitionOptions, SpeechRecognizer};
 use blcvoice_asr_transcribe::{TranscribeRecognizer, TranscribeRecognizerConfig};
@@ -89,8 +91,34 @@ impl RecognizerFactory for TranscribeRecognizerFactory {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecognizerCacheKey {
+    model_path: PathBuf,
+    file_len: Option<u64>,
+    modified: Option<SystemTime>,
+}
+
+impl RecognizerCacheKey {
+    fn for_path(model_path: &Path) -> Self {
+        let resolved_path =
+            fs::canonicalize(model_path).unwrap_or_else(|_| model_path.to_path_buf());
+        let metadata = fs::metadata(&resolved_path).ok();
+        Self {
+            model_path: resolved_path,
+            file_len: metadata.as_ref().map(fs::Metadata::len),
+            modified: metadata.and_then(|metadata| metadata.modified().ok()),
+        }
+    }
+}
+
+struct CachedRecognizer {
+    key: RecognizerCacheKey,
+    recognizer: Box<dyn SpeechRecognizer>,
+}
+
 struct ActiveDictation {
     session_id: SessionId,
+    recognizer_key: RecognizerCacheKey,
     recognizer: Box<dyn SpeechRecognizer>,
     recognition: RecognitionOptions,
 }
@@ -145,6 +173,7 @@ impl DictationSlot {
 pub struct DesktopDictationService {
     capture: Arc<DesktopCaptureService>,
     recognizers: Arc<dyn RecognizerFactory>,
+    recognizer_cache: Mutex<Option<CachedRecognizer>>,
     slot: Mutex<DictationSlot>,
 }
 
@@ -169,6 +198,7 @@ impl DesktopDictationService {
         Self {
             capture,
             recognizers,
+            recognizer_cache: Mutex::new(None),
             slot: Mutex::new(DictationSlot::Idle),
         }
     }
@@ -203,8 +233,8 @@ impl DesktopDictationService {
             *slot = DictationSlot::Preparing;
         }
 
-        let recognizer = match self.recognizers.load(&request.model_path) {
-            Ok(recognizer) => recognizer,
+        let (recognizer_key, recognizer) = match self.acquire_recognizer(&request.model_path) {
+            Ok(prepared) => prepared,
             Err(error) => {
                 self.reset_to_idle();
                 return Err(DesktopDictationError::new(
@@ -220,6 +250,7 @@ impl DesktopDictationService {
         {
             Ok(session) => session,
             Err(error) => {
+                self.recycle_recognizer(recognizer_key, recognizer);
                 self.reset_to_idle();
                 return Err(map_capture_error(error));
             }
@@ -228,6 +259,7 @@ impl DesktopDictationService {
         let mut slot = self.lock_slot();
         if !matches!(*slot, DictationSlot::Preparing) {
             drop(slot);
+            self.recycle_recognizer(recognizer_key, recognizer);
             let _ = self.capture.cancel_dictation(session.id);
             self.reset_to_idle();
             return Err(DesktopDictationError::new(
@@ -237,6 +269,7 @@ impl DesktopDictationService {
         }
         *slot = DictationSlot::Recording(ActiveDictation {
             session_id: session.id,
+            recognizer_key,
             recognizer,
             recognition: request.recognition,
         });
@@ -263,6 +296,7 @@ impl DesktopDictationService {
         let finalized = match self.capture.finish_dictation_recording(session_id) {
             Ok(finalized) => finalized,
             Err(error) => {
+                self.recycle_recognizer(active.recognizer_key, active.recognizer);
                 self.reset_to_idle();
                 return Err(map_capture_error(error));
             }
@@ -271,11 +305,13 @@ impl DesktopDictationService {
         let engine_id = active.recognizer.engine_id().to_owned();
         let model_id = active.recognizer.model_id().to_owned();
         let backend_name = active.recognizer.backend_name().to_owned();
-        let transcription = match self.capture.transcribe_dictation(
+        let transcription_result = self.capture.transcribe_dictation(
             session_id,
             active.recognizer.as_mut(),
             &active.recognition,
-        ) {
+        );
+        self.recycle_recognizer(active.recognizer_key, active.recognizer);
+        let transcription = match transcription_result {
             Ok(transcription) => transcription,
             Err(error) => {
                 let _ = self.capture.fail_dictation_recognition(session_id);
@@ -337,12 +373,14 @@ impl DesktopDictationService {
     }
 
     pub fn cancel(&self, session_id: SessionId) -> Result<SessionSnapshot, DesktopDictationError> {
-        {
+        let recognizer_to_recycle = {
             let mut slot = self.lock_slot();
             let current = mem::take(&mut *slot);
             match current {
-                DictationSlot::Recording(active) if active.session_id == session_id => {}
-                DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => {}
+                DictationSlot::Recording(active) if active.session_id == session_id => {
+                    Some((active.recognizer_key, active.recognizer))
+                }
+                DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => None,
                 DictationSlot::Recording(active) => {
                     let active_id = active.session_id;
                     *slot = DictationSlot::Recording(active);
@@ -371,8 +409,11 @@ impl DesktopDictationService {
                     ));
                 }
             }
-        }
+        };
 
+        if let Some((key, recognizer)) = recognizer_to_recycle {
+            self.recycle_recognizer(key, recognizer);
+        }
         let result = self
             .capture
             .cancel_dictation(session_id)
@@ -400,8 +441,33 @@ impl DesktopDictationService {
         }
     }
 
+    fn acquire_recognizer(
+        &self,
+        model_path: &Path,
+    ) -> Result<(RecognizerCacheKey, Box<dyn SpeechRecognizer>), RecognitionError> {
+        let key = RecognizerCacheKey::for_path(model_path);
+        if let Some(cached) = self.lock_recognizer_cache().take()
+            && cached.key == key
+        {
+            return Ok((key, cached.recognizer));
+        }
+        self.recognizers
+            .load(model_path)
+            .map(|recognizer| (key, recognizer))
+    }
+
+    fn recycle_recognizer(&self, key: RecognizerCacheKey, recognizer: Box<dyn SpeechRecognizer>) {
+        *self.lock_recognizer_cache() = Some(CachedRecognizer { key, recognizer });
+    }
+
     fn reset_to_idle(&self) {
         *self.lock_slot() = DictationSlot::Idle;
+    }
+
+    fn lock_recognizer_cache(&self) -> MutexGuard<'_, Option<CachedRecognizer>> {
+        self.recognizer_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn lock_slot(&self) -> MutexGuard<'_, DictationSlot> {
@@ -466,6 +532,7 @@ mod tests {
         AudioFailure, AudioSampleFormat, AudioStreamConfig, CaptureStats, InputCaptureFactory,
         InputCaptureSession, InputDeviceDiscovery, InputDiscovery,
     };
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Debug)]
     struct FakeDiscovery;
@@ -537,6 +604,18 @@ mod tests {
 
     impl RecognizerFactory for FakeRecognizerFactory {
         fn load(&self, _model_path: &Path) -> Result<Box<dyn SpeechRecognizer>, RecognitionError> {
+            Ok(Box::new(FakeRecognizer::new()))
+        }
+    }
+
+    #[derive(Debug)]
+    struct CountingRecognizerFactory {
+        loads: Arc<AtomicUsize>,
+    }
+
+    impl RecognizerFactory for CountingRecognizerFactory {
+        fn load(&self, _model_path: &Path) -> Result<Box<dyn SpeechRecognizer>, RecognitionError> {
+            self.loads.fetch_add(1, Ordering::SeqCst);
             Ok(Box::new(FakeRecognizer::new()))
         }
     }
@@ -675,6 +754,79 @@ mod tests {
             .expect("insertion must complete");
         assert_eq!(completed.state, blcvoice_core::SessionState::Completed);
         assert_eq!(service.state_name(), "idle");
+    }
+
+    #[test]
+    fn recognizer_is_reused_after_successful_dictation() {
+        let loads = Arc::new(AtomicUsize::new(0));
+        let service = service(Arc::new(CountingRecognizerFactory {
+            loads: Arc::clone(&loads),
+        }));
+
+        let first = service
+            .start(request())
+            .expect("first dictation must start");
+        service
+            .finish(first.id)
+            .expect("first dictation must transcribe");
+        service
+            .begin_insertion(first.id)
+            .expect("insertion must begin");
+        service
+            .complete_insertion(first.id)
+            .expect("insertion must complete");
+
+        let second = service
+            .start(request())
+            .expect("second dictation must start");
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        service
+            .cancel(second.id)
+            .expect("second dictation must cancel");
+    }
+
+    #[test]
+    fn cancelled_recording_returns_recognizer_to_cache() {
+        let loads = Arc::new(AtomicUsize::new(0));
+        let service = service(Arc::new(CountingRecognizerFactory {
+            loads: Arc::clone(&loads),
+        }));
+
+        let first = service
+            .start(request())
+            .expect("first dictation must start");
+        service
+            .cancel(first.id)
+            .expect("first dictation must cancel");
+        let second = service
+            .start(request())
+            .expect("second dictation must start");
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        service
+            .cancel(second.id)
+            .expect("second dictation must cancel");
+    }
+
+    #[test]
+    fn changing_model_path_replaces_single_entry_cache() {
+        let loads = Arc::new(AtomicUsize::new(0));
+        let service = service(Arc::new(CountingRecognizerFactory {
+            loads: Arc::clone(&loads),
+        }));
+
+        let first = service
+            .start(request())
+            .expect("first dictation must start");
+        service
+            .cancel(first.id)
+            .expect("first dictation must cancel");
+        let mut other = request();
+        other.model_path = PathBuf::from("other-model.bin");
+        let second = service.start(other).expect("other model must start");
+        assert_eq!(loads.load(Ordering::SeqCst), 2);
+        service
+            .cancel(second.id)
+            .expect("second dictation must cancel");
     }
 
     #[test]
