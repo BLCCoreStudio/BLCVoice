@@ -62,6 +62,7 @@ const state = {
   testTimerId: null,
   testAutoFinishStarted: false,
   shortcutLifecycleUnlisten: null,
+  shortcutSessionActive: false,
 };
 
 function commandErrorMessage(error) {
@@ -123,17 +124,30 @@ function selectedOrFallbackModel() {
 }
 
 function dictationReady() {
-  return Boolean(invoke && selectedDevice() && installedModelAvailable() && !state.testSessionId);
+  return Boolean(
+    invoke &&
+      selectedDevice() &&
+      installedModelAvailable() &&
+      !state.testSessionId &&
+      !state.shortcutSessionActive
+  );
 }
 
 function updateDictationControls() {
   const active = state.dictationSessionId !== null;
-  elements.dictationToggle.disabled = state.dictationBusy || (!active && !dictationReady());
-  elements.dictationToggle.classList.toggle("recording", active);
-  elements.dictationButtonLabel.textContent = active ? "Stop & type" : "Start dictation";
+  const shortcutActive = state.shortcutSessionActive;
+  elements.dictationToggle.disabled =
+    shortcutActive || state.dictationBusy || (!active && !dictationReady());
+  elements.dictationToggle.classList.toggle("recording", active || shortcutActive);
+  elements.dictationButtonLabel.textContent = shortcutActive
+    ? "Shortcut dictation active"
+    : active
+      ? "Stop & type"
+      : "Start dictation";
   elements.dictationCancel.hidden = !active;
-  elements.dictationCancel.disabled = state.dictationBusy;
-  elements.startTest.disabled = state.testBusy || Boolean(state.testSessionId) || active || !selectedDevice();
+  elements.dictationCancel.disabled = shortcutActive || state.dictationBusy;
+  elements.startTest.disabled =
+    state.testBusy || Boolean(state.testSessionId) || active || shortcutActive || !selectedDevice();
 }
 
 function showDictationError(error) {
@@ -596,6 +610,7 @@ function applyShortcutLifecycle(payload) {
 
   switch (payload.state) {
     case "starting":
+      state.shortcutSessionActive = true;
       state.dictationBusy = true;
       state.dictationSessionId = null;
       clearDictationError();
@@ -603,19 +618,22 @@ function applyShortcutLifecycle(payload) {
       elements.dictationMessage.textContent = "Global shortcut is preparing the configured local model…";
       break;
     case "recording":
+      state.shortcutSessionActive = true;
       state.dictationBusy = false;
-      state.dictationSessionId = payload.sessionId ?? null;
+      state.dictationSessionId = null;
       clearDictationError();
       setPill(elements.dictationState, "Recording", "recording");
       elements.dictationMessage.textContent = "Listening locally. Press Ctrl + Shift + Space again when you are done.";
       break;
     case "finishing":
+      state.shortcutSessionActive = true;
       state.dictationBusy = true;
-      if (payload.sessionId != null) state.dictationSessionId = payload.sessionId;
+      state.dictationSessionId = null;
       setPill(elements.dictationState, "Transcribing", "working");
       elements.dictationMessage.textContent = "Finalizing audio, transcribing locally and delivering text to the focused app…";
       break;
     case "completed":
+      state.shortcutSessionActive = false;
       state.dictationBusy = false;
       state.dictationSessionId = null;
       clearDictationError();
@@ -626,6 +644,7 @@ function applyShortcutLifecycle(payload) {
       elements.dictationMessage.textContent = "Shortcut dictation completed and the transcript was submitted to the active insertion backend.";
       break;
     case "failed":
+      state.shortcutSessionActive = false;
       state.dictationBusy = false;
       state.dictationSessionId = null;
       setPill(elements.dictationState, "Failed", "failed");
@@ -658,10 +677,13 @@ async function recoverDesktopStatus() {
   try {
     const status = await invoke("desktop_status");
     if (status.dictationSessionId && status.dictationState === "recording") {
-      state.dictationSessionId = status.dictationSessionId;
+      state.dictationSessionId = null;
+      state.shortcutSessionActive = true;
       setPill(elements.dictationState, "Recording", "recording");
-      elements.dictationMessage.textContent = "A dictation session was already active.";
+      elements.dictationMessage.textContent =
+        "A backend-owned dictation session was already active. Use Ctrl + Shift + Space to stop it.";
     } else if (status.dictationState === "idle") {
+      state.shortcutSessionActive = false;
       setPill(elements.dictationState, "Ready", "idle");
       elements.dictationMessage.textContent = "Press Start dictation or use Ctrl + Shift + Space.";
     }
