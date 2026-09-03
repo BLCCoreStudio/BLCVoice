@@ -149,10 +149,7 @@ impl SettingsService {
         self.update(|settings| settings.language_hint = language_hint)
     }
 
-    fn update(
-        &self,
-        mutate: impl FnOnce(&mut AppSettings),
-    ) -> Result<AppSettings, SettingsError> {
+    fn update(&self, mutate: impl FnOnce(&mut AppSettings)) -> Result<AppSettings, SettingsError> {
         let mut state = self.lock_state();
         let mut next = state.clone();
         mutate(&mut next);
@@ -171,7 +168,10 @@ impl SettingsService {
 
 fn write_settings(path: &Path, settings: &AppSettings) -> Result<(), SettingsError> {
     let parent = path.parent().ok_or_else(|| {
-        SettingsError::new(format!("settings path {} has no parent directory", path.display()))
+        SettingsError::new(format!(
+            "settings path {} has no parent directory",
+            path.display()
+        ))
     })?;
     fs::create_dir_all(parent).map_err(|error| {
         SettingsError::new(format!(

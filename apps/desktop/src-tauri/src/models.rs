@@ -171,7 +171,10 @@ impl ModelManager {
         fs::create_dir_all(&root).map_err(|error| {
             ModelError::new(
                 ModelErrorKind::Io,
-                format!("could not create model directory {}: {error}", root.display()),
+                format!(
+                    "could not create model directory {}: {error}",
+                    root.display()
+                ),
             )
         })?;
         let client = Client::builder()
@@ -370,13 +373,14 @@ impl ModelManager {
             ));
         }
 
-        TranscribeRecognizer::load(temporary_path, TranscribeRecognizerConfig::default())
-            .map_err(|error| {
+        TranscribeRecognizer::load(temporary_path, TranscribeRecognizerConfig::default()).map_err(
+            |error| {
                 ModelError::new(
                     ModelErrorKind::Validation,
                     format!("downloaded {} model failed validation: {error}", spec.name),
                 )
-            })?;
+            },
+        )?;
 
         #[cfg(target_os = "windows")]
         if final_path.exists() {
@@ -455,7 +459,11 @@ mod tests {
         for (index, model) in MODEL_CATALOG.iter().enumerate() {
             assert!(!model.id.is_empty());
             assert!(model.filename.ends_with(".gguf"));
-            assert!(model.url.starts_with("https://huggingface.co/handy-computer/"));
+            assert!(
+                model
+                    .url
+                    .starts_with("https://huggingface.co/handy-computer/")
+            );
             for other in MODEL_CATALOG.iter().skip(index + 1) {
                 assert_ne!(model.id, other.id);
                 assert_ne!(model.filename, other.filename);
