@@ -11,6 +11,7 @@ use blcvoice_audio::{AudioFailure, CaptureStats, InputCaptureSession};
 use blcvoice_audio_processing::{
     AudioFormat as ProcessingAudioFormat, AudioPreprocessor, ProcessingError, UtteranceBuffer,
 };
+use blcvoice_vad::{VadAnalysis, VadConfig, VadError, VoiceActivityDetector};
 
 pub const DEFAULT_READ_FRAMES: usize = 1_024;
 
@@ -33,6 +34,22 @@ pub struct FinalizedRecording {
     capture_stats: CaptureStats,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeechDetectionReport {
+    pub analysis: VadAnalysis,
+    pub captured_source_frames: usize,
+    pub retained_source_frames: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DetectedCaptureTranscription {
+    NoSpeech(SpeechDetectionReport),
+    Transcribed {
+        detection: SpeechDetectionReport,
+        capture: CaptureTranscription,
+    },
+}
+
 impl FinalizedRecording {
     #[must_use]
     pub fn source_format(&self) -> ProcessingAudioFormat {
@@ -47,6 +64,95 @@ impl FinalizedRecording {
     #[must_use]
     pub const fn capture_stats(&self) -> CaptureStats {
         self.capture_stats
+    }
+
+    /// Detect speech before recognition and transcribe only the outer speech envelope.
+    ///
+    /// VAD runs on a mono view at the native source sample rate, so detected sample indices map
+    /// exactly to source frames. Only leading/trailing silence is removed; internal pauses remain.
+    pub fn transcribe_with_vad(
+        &self,
+        detector: &mut dyn VoiceActivityDetector,
+        vad_config: VadConfig,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+    ) -> Result<DetectedCaptureTranscription, DictationPipelineError> {
+        let source_format = self.utterance.format();
+        let source_frames = self.utterance.frames();
+        let mono_format = ProcessingAudioFormat::new(1, source_format.sample_rate_hz())
+            .map_err(DictationPipelineError::Processing)?;
+        let mut vad_preprocessor = AudioPreprocessor::new(source_format, mono_format)
+            .map_err(DictationPipelineError::Processing)?;
+        let mono = vad_preprocessor
+            .process_utterance(self.utterance.as_interleaved())
+            .map_err(DictationPipelineError::Processing)?;
+        if mono.frames() != source_frames {
+            return Err(DictationPipelineError::InvalidConfiguration(
+                "same-rate VAD preprocessing changed the source frame count",
+            ));
+        }
+        let analysis = detector
+            .analyze_mono(mono.samples(), mono_format.sample_rate_hz(), vad_config)
+            .map_err(DictationPipelineError::SpeechDetection)?;
+
+        let Some(envelope) = analysis.speech_envelope() else {
+            return Ok(DetectedCaptureTranscription::NoSpeech(
+                SpeechDetectionReport {
+                    analysis,
+                    captured_source_frames: source_frames,
+                    retained_source_frames: 0,
+                },
+            ));
+        };
+
+        let channels = usize::from(source_format.channels());
+        let start_sample = envelope.start_sample.checked_mul(channels).ok_or(
+            DictationPipelineError::InvalidConfiguration(
+                "VAD speech range overflowed the source buffer",
+            ),
+        )?;
+        let end_sample = envelope.end_sample.checked_mul(channels).ok_or(
+            DictationPipelineError::InvalidConfiguration(
+                "VAD speech range overflowed the source buffer",
+            ),
+        )?;
+        let source = self
+            .utterance
+            .as_interleaved()
+            .get(start_sample..end_sample)
+            .ok_or(DictationPipelineError::InvalidConfiguration(
+                "VAD speech range fell outside the source buffer",
+            ))?;
+
+        let asr_format = recognizer.capabilities().required_audio_format;
+        let processing_target = processing_format(asr_format)?;
+        let mut preprocessor = AudioPreprocessor::new(source_format, processing_target)
+            .map_err(DictationPipelineError::Processing)?;
+        let processed = preprocessor
+            .process_utterance(source)
+            .map_err(DictationPipelineError::Processing)?;
+        let asr_frames = processed.frames();
+        let input = AsrAudioInput::new(processed.samples(), asr_format)
+            .map_err(DictationPipelineError::InvalidAsrAudio)?;
+        let transcription = recognizer
+            .transcribe(input, options)
+            .map_err(DictationPipelineError::Recognition)?;
+        let retained_source_frames = envelope.sample_len();
+        let capture = CaptureTranscription {
+            transcription,
+            capture_stats: self.capture_stats,
+            source_frames: retained_source_frames,
+            asr_frames,
+        };
+
+        Ok(DetectedCaptureTranscription::Transcribed {
+            detection: SpeechDetectionReport {
+                analysis,
+                captured_source_frames: source_frames,
+                retained_source_frames,
+            },
+            capture,
+        })
     }
 
     /// Preprocess this finalized utterance to the recognizer's required format and run ASR.
@@ -103,6 +209,7 @@ pub enum DictationPipelineError {
         stats: CaptureStats,
     },
     EmptyUtterance,
+    SpeechDetection(VadError),
     Processing(ProcessingError),
     InvalidAsrAudio(AudioInputError),
     Recognition(RecognitionError),
@@ -129,6 +236,7 @@ impl fmt::Display for DictationPipelineError {
             Self::EmptyUtterance => {
                 formatter.write_str("captured utterance contains no audio frames")
             }
+            Self::SpeechDetection(error) => write!(formatter, "speech detection failed: {error}"),
             Self::Processing(error) => write!(formatter, "audio preprocessing failed: {error}"),
             Self::InvalidAsrAudio(error) => {
                 write!(formatter, "processed ASR audio is invalid: {error}")
@@ -142,6 +250,7 @@ impl Error for DictationPipelineError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Capture(error) => Some(error),
+            Self::SpeechDetection(error) => Some(error),
             Self::Processing(error) => Some(error),
             Self::InvalidAsrAudio(error) => Some(error),
             Self::Recognition(error) => Some(error),

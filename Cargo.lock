@@ -334,6 +334,7 @@ dependencies = [
  "blcvoice-audio",
  "blcvoice-audio-cpal",
  "blcvoice-core",
+ "blcvoice-dictation",
  "blcvoice-insertion",
  "blcvoice-insertion-eis",
  "blcvoice-insertion-native",
@@ -341,6 +342,8 @@ dependencies = [
  "blcvoice-platform",
  "blcvoice-runtime",
  "blcvoice-shortcuts",
+ "blcvoice-vad",
+ "blcvoice-vad-silero",
  "futures-util",
  "reqwest",
  "serde",
@@ -358,6 +361,7 @@ dependencies = [
  "blcvoice-asr",
  "blcvoice-audio",
  "blcvoice-audio-processing",
+ "blcvoice-vad",
 ]
 
 [[package]]
@@ -408,6 +412,7 @@ dependencies = [
  "blcvoice-audio",
  "blcvoice-core",
  "blcvoice-dictation",
+ "blcvoice-vad",
 ]
 
 [[package]]

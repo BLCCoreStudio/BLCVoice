@@ -12,9 +12,10 @@ use blcvoice_core::{
     SessionSnapshot, SessionState,
 };
 use blcvoice_dictation::{
-    CaptureTranscription, DictationPipelineError, FinalizedRecording, PumpReport,
-    RecordingCollector,
+    CaptureTranscription, DetectedCaptureTranscription, DictationPipelineError, FinalizedRecording,
+    PumpReport, RecordingCollector, SpeechDetectionReport,
 };
+use blcvoice_vad::{VadConfig, VoiceActivityDetector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeOperation {
@@ -95,6 +96,18 @@ pub struct FinalizationReport {
 pub struct RuntimeTranscription {
     pub session: SessionSnapshot,
     pub capture: CaptureTranscription,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuntimeVadTranscriptionOutcome {
+    NoSpeech {
+        session: SessionSnapshot,
+        detection: SpeechDetectionReport,
+    },
+    Transcribed {
+        transcription: RuntimeTranscription,
+        detection: SpeechDetectionReport,
+    },
 }
 
 enum WorkSlot {
@@ -338,6 +351,74 @@ impl DictationRuntime {
         })
     }
 
+    pub fn transcribe_with_vad(
+        &self,
+        session_id: SessionId,
+        detector: &mut dyn VoiceActivityDetector,
+        vad_config: VadConfig,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+        requires_transform: bool,
+    ) -> Result<RuntimeVadTranscriptionOutcome, RuntimeError> {
+        self.ensure_state(session_id, SessionState::Transcribing)?;
+        let recording = self.take_finalized_for_transcription(session_id)?;
+
+        let outcome = match recording.transcribe_with_vad(detector, vad_config, recognizer, options)
+        {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                if self.restore_finalized(session_id, recording) {
+                    return Err(RuntimeError::Pipeline(error));
+                }
+                return Err(RuntimeError::WorkInvalidated {
+                    session_id,
+                    operation: RuntimeOperation::Transcribe,
+                });
+            }
+        };
+
+        match outcome {
+            DetectedCaptureTranscription::NoSpeech(detection) => {
+                if !self.clear_transcribing_reservation(session_id) {
+                    return Err(RuntimeError::WorkInvalidated {
+                        session_id,
+                        operation: RuntimeOperation::Transcribe,
+                    });
+                }
+                let transition = self.coordinator.cancel(session_id)?;
+                Ok(RuntimeVadTranscriptionOutcome::NoSpeech {
+                    session: transition.snapshot,
+                    detection,
+                })
+            }
+            DetectedCaptureTranscription::Transcribed { detection, capture } => {
+                let transition = match self.coordinator.transition(
+                    session_id,
+                    SessionEvent::TranscriptReady { requires_transform },
+                ) {
+                    Ok(transition) => transition,
+                    Err(error) => {
+                        self.clear_work(session_id);
+                        return Err(RuntimeError::Session(error));
+                    }
+                };
+                if !self.clear_transcribing_reservation(session_id) {
+                    return Err(RuntimeError::WorkInvalidated {
+                        session_id,
+                        operation: RuntimeOperation::Transcribe,
+                    });
+                }
+                Ok(RuntimeVadTranscriptionOutcome::Transcribed {
+                    transcription: RuntimeTranscription {
+                        session: transition.snapshot,
+                        capture,
+                    },
+                    detection,
+                })
+            }
+        }
+    }
+
     pub fn fail_recognition(&self, session_id: SessionId) -> Result<SessionSnapshot, RuntimeError> {
         self.fail(session_id, FailureStage::SpeechRecognition)
     }
@@ -533,7 +614,9 @@ impl DictationRuntime {
 
 fn capture_failure_stage(error: &DictationPipelineError) -> FailureStage {
     match error {
-        DictationPipelineError::EmptyUtterance => FailureStage::SpeechDetection,
+        DictationPipelineError::EmptyUtterance | DictationPipelineError::SpeechDetection(_) => {
+            FailureStage::SpeechDetection
+        }
         DictationPipelineError::InvalidConfiguration(_) => FailureStage::Internal,
         DictationPipelineError::Capture(_)
         | DictationPipelineError::InvalidCaptureRead { .. }

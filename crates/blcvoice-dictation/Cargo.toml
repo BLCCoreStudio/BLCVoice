@@ -11,6 +11,7 @@ description = "Worker-side capture-to-ASR orchestration for BLCVoice"
 blcvoice-asr = { path = "../blcvoice-asr" }
 blcvoice-audio = { path = "../blcvoice-audio" }
 blcvoice-audio-processing = { path = "../blcvoice-audio-processing" }
+blcvoice-vad = { path = "../blcvoice-vad" }
 
 [lints]
 workspace = true

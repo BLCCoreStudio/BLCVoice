@@ -200,6 +200,13 @@ async function finishDictation() {
   try {
     const report = await invoke("dictation_finish", { sessionId });
     state.dictationSessionId = null;
+    if (!report.speechDetected) {
+      showTranscript("", "");
+      setPill(elements.dictationState, "Ready", "idle");
+      elements.dictationMessage.textContent = "No speech was detected; nothing was inserted.";
+      clearDictationError();
+      return;
+    }
     const language = report.detectedLanguage ? report.detectedLanguage.toUpperCase() : "auto";
     showTranscript(report.text, `${language} · ${report.insertionBackend}`);
     elements.recognizerDetail.textContent = report.modelId || "Loaded model";
@@ -642,6 +649,15 @@ function applyShortcutLifecycle(payload) {
       }
       setPill(elements.dictationState, "Ready", "passed");
       elements.dictationMessage.textContent = "Shortcut dictation completed and the transcript was submitted to the active insertion backend.";
+      break;
+    case "noSpeech":
+      state.shortcutSessionActive = false;
+      state.dictationBusy = false;
+      state.dictationSessionId = null;
+      clearDictationError();
+      showTranscript("", "");
+      setPill(elements.dictationState, "Ready", "idle");
+      elements.dictationMessage.textContent = payload.message || "No speech was detected; nothing was inserted.";
       break;
     case "failed":
       state.shortcutSessionActive = false;
