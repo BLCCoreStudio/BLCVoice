@@ -1,0 +1,39 @@
+name: Integrate local history
+
+on:
+  push:
+    branches:
+      - feat/local-history
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libpipewire-0.3-dev libpulse-dev
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Integrate local transcript history
+        run: python3 scripts/_integrate_local_history.py
+      - name: Format and validate
+        run: |
+          cargo +1.98.0 fmt --all
+          cargo +1.98.0 test -p blcvoice-desktop --all-targets
+          cargo +1.98.0 clippy -p blcvoice-desktop --all-targets -- -D warnings
+          node --check apps/desktop/ui/app.js
+      - name: Commit product changes only
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git rm .github/workflows/_integrate_local_history.yml scripts/_integrate_local_history.py
+          git add apps/desktop/src-tauri apps/desktop/ui
+          git commit -m "feat: add bounded local dictation history"
+          git push
