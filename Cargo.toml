@@ -13,6 +13,7 @@ members = [
   "crates/blcvoice-shortcuts",
   "crates/blcvoice-insertion",
   "crates/blcvoice-insertion-eis",
+  "crates/blcvoice-insertion-x11",
   "apps/desktop/src-tauri",
 ]
 
