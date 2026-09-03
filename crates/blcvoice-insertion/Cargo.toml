@@ -1,11 +1,11 @@
 [package]
-name = "blcvoice-shortcuts"
+name = "blcvoice-insertion"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Runtime-independent global shortcut semantics for BLCVoice"
+description = "Runtime-independent text insertion capability contracts for BLCVoice"
 
 [dependencies]
 blcvoice-platform = { path = "../blcvoice-platform" }

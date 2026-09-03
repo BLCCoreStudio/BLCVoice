@@ -9,7 +9,9 @@ members = [
   "crates/blcvoice-asr-transcribe",
   "crates/blcvoice-dictation",
   "crates/blcvoice-runtime",
+  "crates/blcvoice-platform",
   "crates/blcvoice-shortcuts",
+  "crates/blcvoice-insertion",
   "apps/desktop/src-tauri",
 ]
 

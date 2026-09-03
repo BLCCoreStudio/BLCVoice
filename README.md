@@ -6,7 +6,7 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Global-shortcut semantics, capability-driven backend resolution and desktop registration infrastructure are implemented: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal. A production desktop dictation service now prepares the local recognizer before recording, shares the same exclusive capture lifecycle as microphone testing, finalizes captured audio, preprocesses it to the recognizer's required format and produces a transcript that stops truthfully at the pending text-insertion stage. Shortcut decisions are not yet wired into this service because text insertion is still missing. Model management, VAD, text insertion and a production-ready dictation UI are not implemented yet, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Global-shortcut semantics, capability-driven backend resolution and desktop registration infrastructure are implemented: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal. A production desktop dictation service prepares the local recognizer before recording, shares the same exclusive capture lifecycle as microphone testing, finalizes captured audio, preprocesses it to the recognizer's required format and produces a transcript that stops truthfully at the pending text-insertion stage. Runtime-independent text-insertion capability contracts now select explicit Windows, macOS, X11 and Wayland delivery strategies while keeping permission requirements and delivery semantics visible. Concrete text-insertion adapters are not implemented yet, so shortcut decisions are not yet wired into the production dictation service. Model management, VAD, concrete text insertion and a production-ready dictation UI are still incomplete, and there are no production-ready releases.
 
 ## Product principles
 
@@ -42,7 +42,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system boundaries and [do
 The current foundation pins Rust 1.98.0. On Linux, install the Tauri 2 and native audio system prerequisites for your distribution before building the desktop shell.
 
 ```bash
-cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-shortcuts --all-targets
+cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion --all-targets
 cargo run -p blcvoice-desktop
 ```
 
