@@ -6,11 +6,9 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, native microphone capture and a microphone-selection/test screen. Global-shortcut registration is capability-driven: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal.
+BLCVoice is in **pre-alpha development**. For the canonical current implementation snapshot, active pull requests, validation gaps, backlog and exact next safe task, see [PROJECT_STATE.md](PROJECT_STATE.md).
 
-The production desktop dictation command path now reaches a real terminal lifecycle: it prepares the local recognizer before recording, captures and finalizes audio, preprocesses it to the recognizer format, transcribes it, selects a platform insertion backend, submits the complete transcript and commits `Completed` only after the backend accepts the full submission. Windows/macOS use a native Unicode insertion adapter, Linux/X11 uses XTEST with a temporary restored Unicode keysym mapping, and Linux/Wayland uses XDG RemoteDesktop + EIS `ei_text` without root/raw-input fallbacks. Insertion failures are recorded as `TextInsertion` failures and return the transcript as recoverable text. A successful backend receipt still does **not** claim that an arbitrary target application's document mutation is semantically observable.
-
-The global shortcut is not yet connected to the configured production dictation path, and automatic model management, VAD, persistent production settings, local history, the lightweight dictation overlay and release packaging are still incomplete. Platform adapters are compiled and linted continuously in CI; real application compatibility remains a separate runtime-validation requirement.
+Architecture and implementation status are intentionally separated: [ARCHITECTURE.md](ARCHITECTURE.md) defines the current system boundaries, while [docs/adr](docs/adr) records accepted material decisions. Compatibility remains evidence-based; compile/lint/unit coverage is not treated as proof of real desktop-session support.
 
 ## Product principles
 
@@ -51,6 +49,8 @@ cargo run -p blcvoice-desktop
 ```
 
 CI validates the runtime-independent core and insertion contracts on Linux, Windows and macOS, builds/lints the Wayland EIS, X11 XTEST and native Windows/macOS insertion adapters through their cross-platform crate boundaries, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux, Windows and macOS. Linux also runs the X11 adapter against a live Xvfb/XTEST server.
+
+Autonomous/agent-driven development follows the canonical operating contract in [AGENTS.md](AGENTS.md). That contract preserves `ARCHITECTURE.md` and `docs/adr/` as the architecture and decision sources of truth rather than creating parallel systems.
 
 ## Contributing
 
