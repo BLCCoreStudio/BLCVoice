@@ -1,0 +1,11 @@
+[package]
+name = "blcvoice-vad"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Engine-agnostic voice activity detection contracts for BLCVoice"
+
+[lints]
+workspace = true
