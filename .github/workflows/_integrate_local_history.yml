@@ -37,7 +37,18 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
       - name: Apply local history integration
-        run: python3 scripts/_integrate_local_history.py
+        run: |
+          python3 scripts/_integrate_local_history.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("apps/desktop/src-tauri/src/history.rs")
+          text = path.read_text()
+          old = """        let mut next = HistoryFile::default();\n        next.next_id = state.next_id.max(1);\n        write_history(&self.path, &next)?;"""
+          new = """        let next = HistoryFile {\n            next_id: state.next_id.max(1),\n            ..HistoryFile::default()\n        };\n        write_history(&self.path, &next)?;"""
+          if old not in text:
+              raise SystemExit("history clear initializer marker missing")
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Format and validate frontend
         run: |
           cargo +1.98.0 fmt --all
