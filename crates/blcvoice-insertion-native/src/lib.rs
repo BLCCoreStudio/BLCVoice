@@ -48,7 +48,10 @@ fn validate_text(text: &str) -> Result<(), InsertionError> {
 
 #[cfg(target_os = "windows")]
 const fn native_capability() -> InsertionCapability {
-    InsertionCapability::new(InsertionBackend::WindowsSendInput, InsertionAuthorization::None)
+    InsertionCapability::new(
+        InsertionBackend::WindowsSendInput,
+        InsertionAuthorization::None,
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -61,7 +64,10 @@ const fn native_capability() -> InsertionCapability {
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 const fn native_capability() -> InsertionCapability {
-    InsertionCapability::new(InsertionBackend::WindowsSendInput, InsertionAuthorization::None)
+    InsertionCapability::new(
+        InsertionBackend::WindowsSendInput,
+        InsertionAuthorization::None,
+    )
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -114,7 +120,10 @@ mod platform {
         } else {
             InsertionErrorKind::BackendUnavailable
         };
-        InsertionError::new(kind, format!("native insertion backend is unavailable: {error}"))
+        InsertionError::new(
+            kind,
+            format!("native insertion backend is unavailable: {error}"),
+        )
     }
 }
 

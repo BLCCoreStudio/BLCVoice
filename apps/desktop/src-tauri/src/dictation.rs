@@ -664,7 +664,9 @@ mod tests {
     fn insertion_completion_reaches_completed_and_releases_service() {
         let service = service(Arc::new(FakeRecognizerFactory));
         let session = service.start(request()).expect("dictation must start");
-        service.finish(session.id).expect("dictation must transcribe");
+        service
+            .finish(session.id)
+            .expect("dictation must transcribe");
         service
             .begin_insertion(session.id)
             .expect("insertion must be claimable");

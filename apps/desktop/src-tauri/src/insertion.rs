@@ -19,7 +19,10 @@ impl std::fmt::Debug for InsertionState {
         formatter
             .debug_struct("InsertionState")
             .field("connected", &self.inserter.is_some())
-            .field("has_wayland_restore_token", &self.wayland_restore_token.is_some())
+            .field(
+                "has_wayland_restore_token",
+                &self.wayland_restore_token.is_some(),
+            )
             .finish()
     }
 }
@@ -128,7 +131,9 @@ mod tests {
             DesktopPlatform::Linux,
             LinuxDisplayServer::Wayland,
         ));
-        let capability = service.capability().expect("Wayland capability must resolve");
+        let capability = service
+            .capability()
+            .expect("Wayland capability must resolve");
         assert_eq!(capability.backend(), InsertionBackend::XdgRemoteDesktopEis);
         assert_eq!(
             capability.authorization(),
