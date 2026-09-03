@@ -18,6 +18,8 @@ jobs:
           persist-credentials: true
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Correct test fixture
+        run: python3 scripts/_fix_endpointer_test.py
       - name: Refresh lockfile
         run: cargo +1.98.0 generate-lockfile
       - name: Format and validate
