@@ -11,7 +11,11 @@ use blcvoice_audio::{
     InputDeviceDiscovery, InputDiscovery,
 };
 use blcvoice_core::{FailureStage, SessionId, SessionSnapshot, SessionState};
-use blcvoice_runtime::{DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription};
+use blcvoice_dictation::DictationPipelineError;
+use blcvoice_runtime::{
+    DictationRuntime, FinalizationReport, RuntimeError, RuntimeVadTranscriptionOutcome,
+};
+use blcvoice_vad::{VadConfig, VoiceActivityDetector};
 
 const CAPTURE_PUMP_INTERVAL: Duration = Duration::from_millis(10);
 pub const MICROPHONE_TEST_MAX_DURATION_MS: u32 = 30_000;
@@ -25,6 +29,7 @@ pub enum DesktopCaptureErrorKind {
     WorkerSpawn,
     WorkerJoin,
     Runtime,
+    SpeechDetection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +68,15 @@ impl Error for DesktopCaptureError {}
 
 impl From<RuntimeError> for DesktopCaptureError {
     fn from(error: RuntimeError) -> Self {
-        Self::new(DesktopCaptureErrorKind::Runtime, error.to_string())
+        let kind = if matches!(
+            &error,
+            RuntimeError::Pipeline(DictationPipelineError::SpeechDetection(_))
+        ) {
+            DesktopCaptureErrorKind::SpeechDetection
+        } else {
+            DesktopCaptureErrorKind::Runtime
+        };
+        Self::new(kind, error.to_string())
     }
 }
 
@@ -172,14 +185,25 @@ impl DesktopCaptureService {
         self.finish_recording(session_id)
     }
 
-    pub fn transcribe_dictation(
+    pub fn transcribe_dictation_with_vad(
         &self,
         session_id: SessionId,
+        detector: &mut dyn VoiceActivityDetector,
+        vad_config: VadConfig,
         recognizer: &mut dyn SpeechRecognizer,
         options: &RecognitionOptions,
-    ) -> Result<RuntimeTranscription, DesktopCaptureError> {
+    ) -> Result<RuntimeVadTranscriptionOutcome, DesktopCaptureError> {
         self.runtime
-            .transcribe(session_id, recognizer, options, false)
+            .transcribe_with_vad(session_id, detector, vad_config, recognizer, options, false)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    pub fn fail_dictation_speech_detection(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.runtime
+            .fail(session_id, FailureStage::SpeechDetection)
             .map_err(DesktopCaptureError::from)
     }
 

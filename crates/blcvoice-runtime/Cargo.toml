@@ -12,6 +12,7 @@ blcvoice-asr = { path = "../blcvoice-asr" }
 blcvoice-audio = { path = "../blcvoice-audio" }
 blcvoice-core = { path = "../blcvoice-core" }
 blcvoice-dictation = { path = "../blcvoice-dictation" }
+blcvoice-vad = { path = "../blcvoice-vad" }
 
 [lints]
 workspace = true

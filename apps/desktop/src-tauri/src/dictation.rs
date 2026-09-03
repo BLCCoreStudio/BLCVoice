@@ -10,7 +10,10 @@ use blcvoice_asr::{RecognitionError, RecognitionOptions, SpeechRecognizer};
 use blcvoice_asr_transcribe::{TranscribeRecognizer, TranscribeRecognizerConfig};
 use blcvoice_audio::AudioDeviceId;
 use blcvoice_core::{SessionId, SessionSnapshot};
-use blcvoice_runtime::{FinalizationReport, RuntimeTranscription};
+use blcvoice_dictation::SpeechDetectionReport;
+use blcvoice_runtime::{FinalizationReport, RuntimeTranscription, RuntimeVadTranscriptionOutcome};
+use blcvoice_vad::{VadConfig, VoiceActivityDetector};
+use blcvoice_vad_silero::SileroVoiceActivityDetector;
 
 use crate::capture::{DesktopCaptureError, DesktopCaptureErrorKind, DesktopCaptureService};
 
@@ -30,6 +33,7 @@ pub enum DesktopDictationErrorKind {
     StaleSession,
     RecognizerLoad,
     Capture,
+    SpeechDetection,
     Transcription,
     Insertion,
 }
@@ -72,10 +76,31 @@ impl Error for DesktopDictationError {}
 pub struct DesktopDictationReport {
     pub finalized: FinalizationReport,
     pub transcription: RuntimeTranscription,
+    pub detection: SpeechDetectionReport,
+    pub vad_backend: String,
     pub engine_id: String,
     pub model_id: String,
     pub backend_name: String,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DesktopNoSpeechReport {
+    pub finalized: FinalizationReport,
+    pub terminal_session: SessionSnapshot,
+    pub detection: SpeechDetectionReport,
+    pub vad_backend: String,
+    pub engine_id: String,
+    pub model_id: String,
+    pub backend_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DesktopDictationFinish {
+    NoSpeech(DesktopNoSpeechReport),
+    Transcribed(DesktopDictationReport),
+}
+
+type VadFactory = dyn Fn() -> Box<dyn VoiceActivityDetector> + Send + Sync;
 
 trait RecognizerFactory: Send + Sync {
     fn load(&self, model_path: &Path) -> Result<Box<dyn SpeechRecognizer>, RecognitionError>;
@@ -173,6 +198,7 @@ impl DictationSlot {
 pub struct DesktopDictationService {
     capture: Arc<DesktopCaptureService>,
     recognizers: Arc<dyn RecognizerFactory>,
+    vad_factory: Arc<VadFactory>,
     recognizer_cache: Mutex<Option<CachedRecognizer>>,
     slot: Mutex<DictationSlot>,
 }
@@ -191,13 +217,22 @@ impl fmt::Debug for DesktopDictationService {
 impl DesktopDictationService {
     #[must_use]
     pub fn production(capture: Arc<DesktopCaptureService>) -> Self {
-        Self::new(capture, Arc::new(TranscribeRecognizerFactory))
+        Self::new(
+            capture,
+            Arc::new(TranscribeRecognizerFactory),
+            Arc::new(|| Box::new(SileroVoiceActivityDetector::new())),
+        )
     }
 
-    fn new(capture: Arc<DesktopCaptureService>, recognizers: Arc<dyn RecognizerFactory>) -> Self {
+    fn new(
+        capture: Arc<DesktopCaptureService>,
+        recognizers: Arc<dyn RecognizerFactory>,
+        vad_factory: Arc<VadFactory>,
+    ) -> Self {
         Self {
             capture,
             recognizers,
+            vad_factory,
             recognizer_cache: Mutex::new(None),
             slot: Mutex::new(DictationSlot::Idle),
         }
@@ -280,7 +315,7 @@ impl DesktopDictationService {
     pub fn finish(
         &self,
         session_id: SessionId,
-    ) -> Result<DesktopDictationReport, DesktopDictationError> {
+    ) -> Result<DesktopDictationFinish, DesktopDictationError> {
         let mut active = {
             let mut slot = self.lock_slot();
             match mem::replace(&mut *slot, DictationSlot::Finalizing(session_id)) {
@@ -305,33 +340,69 @@ impl DesktopDictationService {
         let engine_id = active.recognizer.engine_id().to_owned();
         let model_id = active.recognizer.model_id().to_owned();
         let backend_name = active.recognizer.backend_name().to_owned();
-        let transcription_result = self.capture.transcribe_dictation(
+        let mut detector = (self.vad_factory)();
+        let vad_backend = detector.backend_name().to_owned();
+        let transcription_result = self.capture.transcribe_dictation_with_vad(
             session_id,
+            detector.as_mut(),
+            VadConfig::default(),
             active.recognizer.as_mut(),
             &active.recognition,
         );
         self.recycle_recognizer(active.recognizer_key, active.recognizer);
-        let transcription = match transcription_result {
-            Ok(transcription) => transcription,
+        let outcome = match transcription_result {
+            Ok(outcome) => outcome,
             Err(error) => {
-                let _ = self.capture.fail_dictation_recognition(session_id);
+                let detection_failed = error.kind() == DesktopCaptureErrorKind::SpeechDetection;
+                if detection_failed {
+                    let _ = self.capture.fail_dictation_speech_detection(session_id);
+                } else {
+                    let _ = self.capture.fail_dictation_recognition(session_id);
+                }
                 self.reset_to_idle();
+                let kind = if detection_failed {
+                    DesktopDictationErrorKind::SpeechDetection
+                } else {
+                    DesktopDictationErrorKind::Transcription
+                };
                 return Err(DesktopDictationError::new(
-                    DesktopDictationErrorKind::Transcription,
-                    format!("dictation transcription failed: {error}"),
+                    kind,
+                    format!("dictation processing failed: {error}"),
                 ));
             }
         };
 
-        *self.lock_slot() = DictationSlot::AwaitingInsertion(session_id);
-
-        Ok(DesktopDictationReport {
-            finalized,
-            transcription,
-            engine_id,
-            model_id,
-            backend_name,
-        })
+        match outcome {
+            RuntimeVadTranscriptionOutcome::NoSpeech { session, detection } => {
+                self.reset_to_idle();
+                Ok(DesktopDictationFinish::NoSpeech(DesktopNoSpeechReport {
+                    finalized,
+                    terminal_session: session,
+                    detection,
+                    vad_backend,
+                    engine_id,
+                    model_id,
+                    backend_name,
+                }))
+            }
+            RuntimeVadTranscriptionOutcome::Transcribed {
+                transcription,
+                detection,
+            } => {
+                *self.lock_slot() = DictationSlot::AwaitingInsertion(session_id);
+                Ok(DesktopDictationFinish::Transcribed(
+                    DesktopDictationReport {
+                        finalized,
+                        transcription,
+                        detection,
+                        vad_backend,
+                        engine_id,
+                        model_id,
+                        backend_name,
+                    },
+                ))
+            }
+        }
     }
 
     pub fn begin_insertion(&self, session_id: SessionId) -> Result<(), DesktopDictationError> {
@@ -481,6 +552,7 @@ fn map_capture_error(error: DesktopCaptureError) -> DesktopDictationError {
     let kind = match error.kind() {
         DesktopCaptureErrorKind::Busy => DesktopDictationErrorKind::Busy,
         DesktopCaptureErrorKind::StaleSession => DesktopDictationErrorKind::StaleSession,
+        DesktopCaptureErrorKind::SpeechDetection => DesktopDictationErrorKind::SpeechDetection,
         DesktopCaptureErrorKind::InvalidDevice
         | DesktopCaptureErrorKind::PumpFailed
         | DesktopCaptureErrorKind::WorkerSpawn
@@ -532,7 +604,49 @@ mod tests {
         AudioFailure, AudioSampleFormat, AudioStreamConfig, CaptureStats, InputCaptureFactory,
         InputCaptureSession, InputDeviceDiscovery, InputDiscovery,
     };
+    use blcvoice_vad::VadAnalysis;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Debug)]
+    struct AlwaysSpeechDetector;
+
+    impl VoiceActivityDetector for AlwaysSpeechDetector {
+        fn backend_name(&self) -> &'static str {
+            "test-vad"
+        }
+
+        fn analyze_mono(
+            &mut self,
+            samples: &[f32],
+            sample_rate_hz: u32,
+            _config: VadConfig,
+        ) -> Result<VadAnalysis, blcvoice_vad::VadError> {
+            let ranges = if samples.is_empty() {
+                Vec::new()
+            } else {
+                vec![blcvoice_vad::SpeechRange::new(0, samples.len())?]
+            };
+            VadAnalysis::new(sample_rate_hz, samples.len(), ranges, Some(0.99))
+        }
+    }
+
+    #[derive(Debug)]
+    struct NoSpeechDetector;
+
+    impl VoiceActivityDetector for NoSpeechDetector {
+        fn backend_name(&self) -> &'static str {
+            "test-vad"
+        }
+
+        fn analyze_mono(
+            &mut self,
+            samples: &[f32],
+            sample_rate_hz: u32,
+            _config: VadConfig,
+        ) -> Result<VadAnalysis, blcvoice_vad::VadError> {
+            VadAnalysis::new(sample_rate_hz, samples.len(), Vec::new(), Some(0.01))
+        }
+    }
 
     #[derive(Debug)]
     struct FakeDiscovery;
@@ -692,7 +806,11 @@ mod tests {
             Arc::new(FakeDiscovery),
             Arc::new(FakeCaptureFactory),
         ));
-        DesktopDictationService::new(capture, recognizers)
+        DesktopDictationService::new(
+            capture,
+            recognizers,
+            Arc::new(|| Box::new(AlwaysSpeechDetector)),
+        )
     }
 
     fn request() -> DesktopDictationRequest {
@@ -721,7 +839,11 @@ mod tests {
         let report = service
             .finish(session.id)
             .expect("dictation must transcribe");
+        let DesktopDictationFinish::Transcribed(report) = report else {
+            panic!("test VAD must report speech");
+        };
         assert_eq!(report.engine_id, "fake");
+        assert_eq!(report.vad_backend, "test-vad");
         assert_eq!(
             report.transcription.capture.transcription.text,
             "hello from BLCVoice"
@@ -853,5 +975,32 @@ mod tests {
         service
             .cancel(session.id)
             .expect("active dictation must cancel");
+    }
+
+    #[test]
+    fn no_speech_skips_asr_and_returns_clean_terminal_outcome() {
+        let capture = Arc::new(DesktopCaptureService::new(
+            Arc::new(FakeDiscovery),
+            Arc::new(FakeCaptureFactory),
+        ));
+        let service = DesktopDictationService::new(
+            capture,
+            Arc::new(FakeRecognizerFactory),
+            Arc::new(|| Box::new(NoSpeechDetector)),
+        );
+        let session = service.start(request()).expect("dictation must start");
+        let outcome = service
+            .finish(session.id)
+            .expect("silence must finish cleanly");
+        let DesktopDictationFinish::NoSpeech(report) = outcome else {
+            panic!("silence must not reach ASR");
+        };
+        assert_eq!(
+            report.terminal_session.state,
+            blcvoice_core::SessionState::Cancelled
+        );
+        assert!(!report.detection.analysis.contains_speech());
+        assert_eq!(report.detection.retained_source_frames, 0);
+        assert_eq!(service.state_name(), "idle");
     }
 }
