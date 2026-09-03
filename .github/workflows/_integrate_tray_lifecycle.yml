@@ -1,0 +1,39 @@
+name: Integrate tray background lifecycle
+
+on:
+  push:
+    branches:
+      - feat/tray-background-lifecycle
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libpipewire-0.3-dev libpulse-dev
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Apply tray lifecycle
+        run: python3 scripts/_integrate_tray_lifecycle.py
+      - name: Refresh lockfile and validate
+        run: |
+          cargo +1.98.0 generate-lockfile
+          cargo +1.98.0 fmt --all
+          cargo +1.98.0 test -p blcvoice-desktop --all-targets
+          cargo +1.98.0 clippy -p blcvoice-desktop --all-targets -- -D warnings
+      - name: Commit validated product change and remove helpers
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git add Cargo.lock apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/src/lib.rs
+          git rm .github/workflows/_integrate_tray_lifecycle.yml scripts/_integrate_tray_lifecycle.py
+          git commit -m "feat: keep dictation available from the system tray"
+          git push
