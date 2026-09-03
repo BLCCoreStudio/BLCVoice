@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BLCVoice Dictation</title>
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <main class="overlay-shell" aria-live="polite" aria-atomic="true">
+      <div id="state-indicator" class="state-indicator idle" aria-hidden="true"></div>
+      <div class="copy">
+        <strong id="overlay-title">BLCVoice</strong>
+        <span id="overlay-message">Ready</span>
+      </div>
+      <span id="shortcut-hint" class="shortcut-hint">Ctrl Shift Space</span>
+    </main>
+    <script src="overlay.js"></script>
+  </body>
+</html>
