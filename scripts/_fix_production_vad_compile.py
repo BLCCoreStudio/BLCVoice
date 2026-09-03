@@ -28,6 +28,30 @@ replace_once(
     '    use super::*;\n    use blcvoice_vad::VadAnalysis;\n',
 )
 
+# VAD-aware transcription supersedes the old desktop convenience wrapper. Remove it rather
+# than suppressing dead-code warnings, and drop the now-unused RuntimeTranscription import.
+replace_once(
+    "apps/desktop/src-tauri/src/capture.rs",
+    '    DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription,\n    RuntimeVadTranscriptionOutcome,\n',
+    '    DictationRuntime, FinalizationReport, RuntimeError, RuntimeVadTranscriptionOutcome,\n',
+)
+replace_once(
+    "apps/desktop/src-tauri/src/capture.rs",
+    '''    pub fn transcribe_dictation(
+        &self,
+        session_id: SessionId,
+        recognizer: &mut dyn SpeechRecognizer,
+        options: &RecognitionOptions,
+    ) -> Result<RuntimeTranscription, DesktopCaptureError> {
+        self.runtime
+            .transcribe(session_id, recognizer, options, false)
+            .map_err(DesktopCaptureError::from)
+    }
+
+''',
+    '',
+)
+
 # Prefer an exhaustive match over a nested let-else for the two finish outcomes.
 ipc = Path("apps/desktop/src-tauri/src/ipc.rs")
 source = ipc.read_text()
