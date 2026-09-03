@@ -95,9 +95,7 @@ mod platform {
         CURRENT_TIME, NONE,
         connection::Connection,
         protocol::{
-            xproto::{
-                ConnectionExt as XprotoConnectionExt, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
-            },
+            xproto::{ConnectionExt as XprotoConnectionExt, KEY_PRESS_EVENT, KEY_RELEASE_EVENT},
             xtest::ConnectionExt as XtestConnectionExt,
         },
         rust_connection::RustConnection,
@@ -130,7 +128,9 @@ mod platform {
                 .query_extension(b"XTEST")
                 .map_err(|error| unavailable(format!("failed to query XTEST: {error}")))?
                 .reply()
-                .map_err(|error| unavailable(format!("failed to read XTEST capability: {error}")))?;
+                .map_err(|error| {
+                    unavailable(format!("failed to read XTEST capability: {error}"))
+                })?;
             if !xtest.present {
                 return Err(unavailable(
                     "the active X11 server does not expose the XTEST extension",
@@ -143,9 +143,8 @@ mod platform {
             let count_u16 = u16::from(max_keycode)
                 .saturating_sub(u16::from(min_keycode))
                 .saturating_add(1);
-            let count = u8::try_from(count_u16).map_err(|_| {
-                unavailable("the X11 keycode range cannot be represented safely")
-            })?;
+            let count = u8::try_from(count_u16)
+                .map_err(|_| unavailable("the X11 keycode range cannot be represented safely"))?;
 
             let mapping = connection
                 .get_keyboard_mapping(min_keycode, count)
@@ -211,7 +210,9 @@ mod platform {
                     self.scratch.keysyms_per_keycode,
                     &mapping,
                 )
-                .map_err(|error| backend_failure(format!("failed to remap X11 scratch key: {error}")))?
+                .map_err(|error| {
+                    backend_failure(format!("failed to remap X11 scratch key: {error}"))
+                })?
                 .check()
                 .map_err(|error| {
                     backend_failure(format!("X11 rejected scratch key remapping: {error}"))
@@ -229,7 +230,9 @@ mod platform {
                     0,
                     0,
                 )
-                .map_err(|error| backend_failure(format!("failed to queue XTEST key press: {error}")))?
+                .map_err(|error| {
+                    backend_failure(format!("failed to queue XTEST key press: {error}"))
+                })?
                 .check()
                 .map_err(|error| backend_failure(format!("XTEST key press failed: {error}")))?;
 
@@ -351,9 +354,7 @@ mod platform {
         };
         InsertionError::new(
             kind,
-            format!(
-                "XTEST insertion failed after {submitted} UTF-8 bytes were submitted: {error}"
-            ),
+            format!("XTEST insertion failed after {submitted} UTF-8 bytes were submitted: {error}"),
         )
     }
 
