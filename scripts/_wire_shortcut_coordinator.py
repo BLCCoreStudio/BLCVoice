@@ -1,13 +1,20 @@
 from pathlib import Path
 
+
+def replace_section(text: str, start: str, end: str, replacement: str) -> str:
+    start_index = text.find(start)
+    if start_index < 0:
+        raise SystemExit(f"section start not found: {start[:80]!r}")
+    end_index = text.find(end, start_index)
+    if end_index < 0:
+        raise SystemExit(f"section end not found: {end[:80]!r}")
+    return text[:start_index] + replacement + text[end_index:]
+
+
 ipc = Path("apps/desktop/src-tauri/src/ipc.rs")
 s = ipc.read_text()
 
-s = s.replace(
-    "#[derive(Debug, Serialize)]\n#[serde(rename_all = \"camelCase\")]\npub struct CommandErrorDto",
-    "#[derive(Debug, Clone, Serialize)]\n#[serde(rename_all = \"camelCase\")]\npub struct CommandErrorDto",
-    1,
-)
+s = s.replace("use tauri::State;", "use tauri::{Manager, State};", 1)
 
 needle = '''    fn insertion(error: InsertionError, recoverable_text: String) -> Self {
         let code = match error.kind() {
@@ -41,12 +48,6 @@ if needle not in s:
     raise SystemExit("CommandErrorDto insertion block not found")
 s = s.replace(needle, replacement, 1)
 
-s = s.replace(
-    "#[derive(Debug, Serialize)]\n#[serde(rename_all = \"camelCase\")]\npub struct DictationReportDto",
-    "#[derive(Debug, Clone, Serialize)]\n#[serde(rename_all = \"camelCase\")]\npub struct DictationReportDto",
-    1,
-)
-
 needle = '''impl DictationReportDto {
     fn completed(
 '''
@@ -65,7 +66,7 @@ if needle not in s:
     raise SystemExit("DictationReportDto impl not found")
 s = s.replace(needle, replacement, 1)
 
-marker = '''#[derive(Debug, Clone, Serialize)]
+marker = '''#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandErrorDto'''
 helper_impl = r'''
@@ -198,6 +199,75 @@ impl DesktopState {
 if marker not in s:
     raise SystemExit("CommandErrorDto marker not found")
 s = s.replace(marker, helper_impl + marker, 1)
+
+finish_start = '''#[tauri::command]
+pub async fn dictation_finish('''
+finish_end = '''#[tauri::command]
+pub async fn dictation_cancel('''
+finish_replacement = '''#[tauri::command]
+pub async fn dictation_finish(
+    app: tauri::AppHandle,
+    session_id: u64,
+) -> Result<DictationReportDto, CommandErrorDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DesktopState>()
+            .finish_dictation_session(SessionId::new(session_id))
+    })
+    .await
+    .map_err(|error| {
+        CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
+    })?
+}
+
+'''
+s = replace_section(s, finish_start, finish_end, finish_replacement)
+
+cancel_start = '''#[tauri::command]
+pub async fn dictation_cancel('''
+cancel_end = '''#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelStatusDto'''
+cancel_replacement = '''#[tauri::command]
+pub async fn dictation_cancel(
+    app: tauri::AppHandle,
+    session_id: u64,
+) -> Result<SessionDto, CommandErrorDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DesktopState>()
+            .cancel_dictation_session(SessionId::new(session_id))
+            .map(SessionDto::from)
+    })
+    .await
+    .map_err(|error| {
+        CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
+    })?
+}
+
+'''
+s = replace_section(s, cancel_start, cancel_end, cancel_replacement)
+
+configured_start = '''#[tauri::command]
+pub async fn dictation_start_configured('''
+configured_end = '''#[tauri::command]
+pub fn insertion_capability'''
+configured_replacement = '''#[tauri::command]
+pub async fn dictation_start_configured(
+    app: tauri::AppHandle,
+) -> Result<SessionDto, CommandErrorDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DesktopState>()
+            .start_configured_dictation()
+            .map(SessionDto::from)
+    })
+    .await
+    .map_err(|error| {
+        CommandErrorDto::blocking_worker(format!("dictation worker failed: {error}"))
+    })?
+}
+
+'''
+s = replace_section(s, configured_start, configured_end, configured_replacement)
+
 ipc.write_text(s)
 
 shortcut = Path("apps/desktop/src-tauri/src/shortcut.rs")
