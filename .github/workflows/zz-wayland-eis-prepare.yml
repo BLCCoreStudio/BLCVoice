@@ -24,6 +24,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("crates/blcvoice-insertion-eis/src/lib.rs")
           text = path.read_text()
@@ -32,13 +33,14 @@ jobs:
               ".set_devices(enumflags2::BitFlags::from_flag(PortalDeviceType::Keyboard))",
           )
 
-          old_ready = '''                let event = events.next().await.ok_or_else(|| {
-                    InsertionError::new(
-                        InsertionErrorKind::BackendUnavailable,
-                        "the EIS event stream closed before a text device became available",
-                    )
-                })??;'''
-          new_ready = '''                let event = events
+          readiness_pattern = re.compile(
+              r"let event = events\.next\(\)\.await\.ok_or_else\(\|\| \{\s*"
+              r"InsertionError::new\(\s*InsertionErrorKind::BackendUnavailable,\s*"
+              r'"the EIS event stream closed before a text device became available",\s*'
+              r"\)\s*\}\)\?\?;"
+          )
+          text, readiness_count = readiness_pattern.subn(
+              '''let event = events
                     .next()
                     .await
                     .ok_or_else(|| {
@@ -49,18 +51,20 @@ jobs:
                     })?
                     .map_err(|error| {
                         backend_failure(format!("failed to read an EIS readiness event: {error}"))
-                    })?;'''
-          if old_ready not in text:
-              raise SystemExit("readiness event block not found")
-          text = text.replace(old_ready, new_ready, 1)
+                    })?;''',
+              text,
+              count=1,
+          )
+          if readiness_count != 1:
+              raise SystemExit(f"expected one readiness block, found {readiness_count}")
 
-          old_live = '''                    let event = event.ok_or_else(|| {
-                        InsertionError::new(
-                            InsertionErrorKind::BackendUnavailable,
-                            "the EIS event stream closed",
-                        )
-                    })??;'''
-          new_live = '''                    let event = event
+          live_pattern = re.compile(
+              r"let event = event\.ok_or_else\(\|\| \{\s*"
+              r"InsertionError::new\(\s*InsertionErrorKind::BackendUnavailable,\s*"
+              r'"the EIS event stream closed",\s*\)\s*\}\)\?\?;'
+          )
+          text, live_count = live_pattern.subn(
+              '''let event = event
                         .ok_or_else(|| {
                             InsertionError::new(
                                 InsertionErrorKind::BackendUnavailable,
@@ -69,10 +73,13 @@ jobs:
                         })?
                         .map_err(|error| {
                             backend_failure(format!("failed to read an EIS event: {error}"))
-                        })?;'''
-          if old_live not in text:
-              raise SystemExit("live event block not found")
-          text = text.replace(old_live, new_live, 1)
+                        })?;''',
+              text,
+              count=1,
+          )
+          if live_count != 1:
+              raise SystemExit(f"expected one live event block, found {live_count}")
+
           path.write_text(text)
           PY
       - name: Regenerate lockfile
