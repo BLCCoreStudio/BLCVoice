@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod capture;
+mod coordinator;
 mod dictation;
 mod insertion;
 mod ipc;
@@ -8,6 +9,7 @@ mod models;
 mod settings;
 mod shortcut;
 
+use coordinator::ShortcutDictationCoordinator;
 use ipc::{
     DesktopState, audio_input_discovery, desktop_status, dictation_cancel, dictation_finish,
     dictation_start, dictation_start_configured, insertion_capability, microphone_test_cancel,
@@ -26,6 +28,7 @@ fn core_status() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(ShortcutService::production())
+        .manage(ShortcutDictationCoordinator::default())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;

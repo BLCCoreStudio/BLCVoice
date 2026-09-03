@@ -10,7 +10,7 @@ use blcvoice_audio_cpal::{CpalInputCaptureFactory, CpalInputDeviceDiscovery};
 use blcvoice_core::{SessionId, SessionSnapshot};
 use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::capture::{
     DesktopCaptureError, DesktopCaptureErrorKind, DesktopCaptureService, MicrophoneTestReport,
@@ -52,6 +52,129 @@ impl DesktopState {
     }
 }
 
+impl DesktopState {
+    pub(crate) fn start_configured_dictation(&self) -> Result<SessionSnapshot, CommandErrorDto> {
+        let mut snapshot = self.settings.snapshot();
+        let discovery = self.capture.discover_input_devices();
+        let device = snapshot
+            .selected_input_device_id()
+            .and_then(|selected| {
+                discovery
+                    .devices
+                    .iter()
+                    .find(|device| device.id.as_str() == selected)
+            })
+            .or_else(|| discovery.devices.iter().find(|device| device.is_default))
+            .or_else(|| discovery.devices.first())
+            .ok_or_else(|| {
+                CommandErrorDto::plain("no_input_device", "no usable microphone is available")
+            })?;
+        let device_id = device.id.clone();
+        if snapshot.selected_input_device_id() != Some(device_id.as_str()) {
+            snapshot = self
+                .settings
+                .set_input_device(Some(device_id.to_string()))
+                .map_err(CommandErrorDto::from)?;
+        }
+
+        let selected_model = snapshot.selected_model_id().and_then(|id| {
+            self.models
+                .installed_model_path(id)
+                .ok()
+                .flatten()
+                .map(|path| (id.to_owned(), path))
+        });
+        let (model_id, model_path) = if let Some(selected) = selected_model {
+            selected
+        } else {
+            let catalog = self.models.catalog();
+            let chosen = catalog
+                .iter()
+                .find(|status| status.installed && status.recommended)
+                .or_else(|| catalog.iter().find(|status| status.installed))
+                .ok_or_else(|| {
+                    CommandErrorDto::plain(
+                        "model_not_installed",
+                        "install a speech model before starting dictation",
+                    )
+                })?;
+            let path = self
+                .models
+                .installed_model_path(chosen.spec.id())
+                .map_err(CommandErrorDto::from)?
+                .ok_or_else(|| {
+                    CommandErrorDto::plain(
+                        "model_not_installed",
+                        "speech model disappeared before dictation started",
+                    )
+                })?;
+            (chosen.spec.id().to_owned(), path)
+        };
+        if snapshot.selected_model_id() != Some(model_id.as_str()) {
+            snapshot = self
+                .settings
+                .set_model(Some(model_id))
+                .map_err(CommandErrorDto::from)?;
+        }
+
+        let recognition = RecognitionOptions {
+            language_hint: snapshot.language_hint().map(str::to_owned),
+            ..RecognitionOptions::default()
+        };
+        self.dictation
+            .start(DesktopDictationRequest {
+                device_id,
+                model_path,
+                recognition,
+            })
+            .map_err(CommandErrorDto::from)
+    }
+
+    pub(crate) fn finish_dictation_session(
+        &self,
+        session_id: SessionId,
+    ) -> Result<DictationReportDto, CommandErrorDto> {
+        let report = self
+            .dictation
+            .finish(session_id)
+            .map_err(CommandErrorDto::from)?;
+        let text = report.transcription.capture.transcription.text.clone();
+        self.dictation
+            .begin_insertion(session_id)
+            .map_err(CommandErrorDto::from)?;
+
+        let receipt = match self.insertion.insert_text(&text) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let lifecycle_failure = self.dictation.fail_insertion(session_id).err();
+                let mut dto = CommandErrorDto::insertion(error, text);
+                if let Some(lifecycle_failure) = lifecycle_failure {
+                    dto.message = format!(
+                        "{}; additionally, insertion failure could not be committed to the lifecycle: {}",
+                        dto.message, lifecycle_failure
+                    );
+                }
+                return Err(dto);
+            }
+        };
+
+        let completed = self
+            .dictation
+            .complete_insertion(session_id)
+            .map_err(CommandErrorDto::from)?;
+        Ok(DictationReportDto::completed(report, receipt, completed))
+    }
+
+    pub(crate) fn cancel_dictation_session(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, CommandErrorDto> {
+        self.dictation
+            .cancel(session_id)
+            .map_err(CommandErrorDto::from)
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandErrorDto {
@@ -87,6 +210,18 @@ impl CommandErrorDto {
             message: error.message().to_owned(),
             recoverable_text: Some(recoverable_text),
         }
+    }
+
+    pub(crate) const fn code(&self) -> &'static str {
+        self.code
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub(crate) fn recoverable_text(&self) -> Option<&str> {
+        self.recoverable_text.as_deref()
     }
 }
 
@@ -329,6 +464,14 @@ pub struct DictationReportDto {
 }
 
 impl DictationReportDto {
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub(crate) fn insertion_backend(&self) -> &str {
+        &self.insertion_backend
+    }
+
     fn completed(
         report: DesktopDictationReport,
         receipt: InsertionReceipt,
@@ -463,38 +606,12 @@ pub async fn dictation_start(
 
 #[tauri::command]
 pub async fn dictation_finish(
-    state: State<'_, DesktopState>,
+    app: tauri::AppHandle,
     session_id: u64,
 ) -> Result<DictationReportDto, CommandErrorDto> {
-    let dictation = Arc::clone(&state.dictation);
-    let insertion = Arc::clone(&state.insertion);
     tauri::async_runtime::spawn_blocking(move || {
-        let session_id = SessionId::new(session_id);
-        let report = dictation.finish(session_id).map_err(CommandErrorDto::from)?;
-        let text = report.transcription.capture.transcription.text.clone();
-        dictation
-            .begin_insertion(session_id)
-            .map_err(CommandErrorDto::from)?;
-
-        let receipt = match insertion.insert_text(&text) {
-            Ok(receipt) => receipt,
-            Err(error) => {
-                let lifecycle_failure = dictation.fail_insertion(session_id).err();
-                let mut dto = CommandErrorDto::insertion(error, text);
-                if let Some(lifecycle_failure) = lifecycle_failure {
-                    dto.message = format!(
-                        "{}; additionally, insertion failure could not be committed to the lifecycle: {}",
-                        dto.message, lifecycle_failure
-                    );
-                }
-                return Err(dto);
-            }
-        };
-
-        let completed = dictation
-            .complete_insertion(session_id)
-            .map_err(CommandErrorDto::from)?;
-        Ok(DictationReportDto::completed(report, receipt, completed))
+        app.state::<DesktopState>()
+            .finish_dictation_session(SessionId::new(session_id))
     })
     .await
     .map_err(|error| {
@@ -504,16 +621,18 @@ pub async fn dictation_finish(
 
 #[tauri::command]
 pub async fn dictation_cancel(
-    state: State<'_, DesktopState>,
+    app: tauri::AppHandle,
     session_id: u64,
 ) -> Result<SessionDto, CommandErrorDto> {
-    let dictation = Arc::clone(&state.dictation);
-    run_dictation_blocking(move || {
-        dictation
-            .cancel(SessionId::new(session_id))
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DesktopState>()
+            .cancel_dictation_session(SessionId::new(session_id))
             .map(SessionDto::from)
     })
     .await
+    .map_err(|error| {
+        CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
+    })?
 }
 
 #[derive(Debug, Serialize)]
@@ -668,85 +787,12 @@ pub async fn model_remove(
 
 #[tauri::command]
 pub async fn dictation_start_configured(
-    state: State<'_, DesktopState>,
+    app: tauri::AppHandle,
 ) -> Result<SessionDto, CommandErrorDto> {
-    let capture = Arc::clone(&state.capture);
-    let dictation = Arc::clone(&state.dictation);
-    let settings = Arc::clone(&state.settings);
-    let models = Arc::clone(&state.models);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut snapshot = settings.snapshot();
-        let discovery = capture.discover_input_devices();
-        let device = snapshot
-            .selected_input_device_id()
-            .and_then(|selected| {
-                discovery
-                    .devices
-                    .iter()
-                    .find(|device| device.id.as_str() == selected)
-            })
-            .or_else(|| discovery.devices.iter().find(|device| device.is_default))
-            .or_else(|| discovery.devices.first())
-            .ok_or_else(|| {
-                CommandErrorDto::plain("no_input_device", "no usable microphone is available")
-            })?;
-        let device_id = device.id.clone();
-        if snapshot.selected_input_device_id() != Some(device_id.as_str()) {
-            snapshot = settings
-                .set_input_device(Some(device_id.to_string()))
-                .map_err(CommandErrorDto::from)?;
-        }
-
-        let selected_model = snapshot.selected_model_id().and_then(|id| {
-            models
-                .installed_model_path(id)
-                .ok()
-                .flatten()
-                .map(|path| (id.to_owned(), path))
-        });
-        let (model_id, model_path) = if let Some(selected) = selected_model {
-            selected
-        } else {
-            let catalog = models.catalog();
-            let chosen = catalog
-                .iter()
-                .find(|status| status.installed && status.recommended)
-                .or_else(|| catalog.iter().find(|status| status.installed))
-                .ok_or_else(|| {
-                    CommandErrorDto::plain(
-                        "model_not_installed",
-                        "install a speech model before starting dictation",
-                    )
-                })?;
-            let path = models
-                .installed_model_path(chosen.spec.id())
-                .map_err(CommandErrorDto::from)?
-                .ok_or_else(|| {
-                    CommandErrorDto::plain(
-                        "model_not_installed",
-                        "speech model disappeared before dictation started",
-                    )
-                })?;
-            (chosen.spec.id().to_owned(), path)
-        };
-        if snapshot.selected_model_id() != Some(model_id.as_str()) {
-            snapshot = settings
-                .set_model(Some(model_id))
-                .map_err(CommandErrorDto::from)?;
-        }
-
-        let recognition = RecognitionOptions {
-            language_hint: snapshot.language_hint().map(str::to_owned),
-            ..RecognitionOptions::default()
-        };
-        dictation
-            .start(DesktopDictationRequest {
-                device_id,
-                model_path,
-                recognition,
-            })
+        app.state::<DesktopState>()
+            .start_configured_dictation()
             .map(SessionDto::from)
-            .map_err(CommandErrorDto::from)
     })
     .await
     .map_err(|error| {

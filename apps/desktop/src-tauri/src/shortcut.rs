@@ -8,6 +8,8 @@ use blcvoice_shortcuts::{
 use serde::Serialize;
 use tauri::{App, AppHandle, Emitter, Manager, Runtime, State};
 
+use crate::coordinator::ShortcutDictationCoordinator;
+
 #[cfg(target_os = "linux")]
 use ashpd::desktop::{
     CreateSessionOptions,
@@ -114,6 +116,10 @@ impl ShortcutService {
             return ShortcutDecision::Ignore;
         }
         state.controller.handle(phase)
+    }
+
+    pub(crate) fn reset_controller(&self) {
+        self.lock_state().controller.force_idle();
     }
 
     fn capability(&self) -> ShortcutCapabilityDto {
@@ -290,6 +296,8 @@ fn route_shortcut_phase<R: Runtime>(app: &AppHandle<R>, phase: ShortcutPhase) {
         decision: shortcut_decision_name(decision),
     };
     let _ = app.emit(SHORTCUT_DECISION_EVENT, payload);
+    app.state::<ShortcutDictationCoordinator>()
+        .handle_shortcut(app.clone(), decision);
 }
 
 fn shortcut_capability_for(state: &ShortcutServiceState) -> ShortcutCapabilityDto {
