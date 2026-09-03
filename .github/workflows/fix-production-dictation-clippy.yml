@@ -23,81 +23,60 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           capture = Path('apps/desktop/src-tauri/src/capture.rs')
           text = capture.read_text()
-          old = '''    pub fn dictation_insertion_delivered(
-              &self,
-              session_id: SessionId,
-          ) -> Result<SessionSnapshot, DesktopCaptureError> {
-              self.runtime
-                  .insertion_delivered(session_id)
-                  .map_err(DesktopCaptureError::from)
-          }
-
-          '''
-          if old not in text:
-              raise SystemExit('capture insertion method not found')
-          capture.write_text(text.replace(old, '', 1))
+          text, count = re.subn(
+              r'    pub fn dictation_insertion_delivered\(.*?\n    }\n\n(?=    fn start_capture)',
+              '',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'capture insertion method replacements: {count}')
+          capture.write_text(text)
 
           dictation = Path('apps/desktop/src-tauri/src/dictation.rs')
           text = dictation.read_text()
-          old = '''    pub fn insertion_delivered(
-              &self,
-              session_id: SessionId,
-          ) -> Result<SessionSnapshot, DesktopDictationError> {
-              {
-                  let slot = self.lock_slot();
-                  match *slot {
-                      DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => {}
-                      DictationSlot::AwaitingInsertion(active_id) => {
-                          return Err(stale_error(session_id, active_id));
-                      }
-                      _ => return Err(busy_error(slot.state_name())),
-                  }
-              }
-
-              let result = self
-                  .capture
-                  .dictation_insertion_delivered(session_id)
-                  .map_err(map_capture_error);
-              self.reset_to_idle();
-              result
-          }
-
-          '''
-          if old not in text:
-              raise SystemExit('dictation insertion method not found')
-          text = text.replace(old, '', 1)
-          old_test = '''        let completed = service
-              .insertion_delivered(session.id)
-              .expect("insertion acknowledgement must complete lifecycle");
-          assert_eq!(completed.state, blcvoice_core::SessionState::Completed);
-          assert_eq!(service.state_name(), "idle");
-          '''
-          new_test = '''        let cancelled = service
+          text, count = re.subn(
+              r'    pub fn insertion_delivered\(.*?\n    }\n\n(?=    #\[must_use\]\n    pub fn state_name)',
+              '',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'dictation insertion method replacements: {count}')
+          text, count = re.subn(
+              r'        let completed = service\n            \.insertion_delivered\(session\.id\)\n            \.expect\("insertion acknowledgement must complete lifecycle"\);\n        assert_eq!\(completed\.state, blcvoice_core::SessionState::Completed\);\n        assert_eq!\(service\.state_name\(\), "idle"\);',
+              '''        let cancelled = service
               .cancel(session.id)
               .expect("pending insertion dictation must remain cancellable");
           assert_eq!(cancelled.state, blcvoice_core::SessionState::Cancelled);
-          assert_eq!(service.state_name(), "idle");
-          '''
-          if old_test not in text:
-              raise SystemExit('dictation insertion test block not found')
-          dictation.write_text(text.replace(old_test, new_test, 1))
+          assert_eq!(service.state_name(), "idle");''',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'dictation insertion test replacements: {count}')
+          dictation.write_text(text)
 
           ipc = Path('apps/desktop/src-tauri/src/ipc.rs')
           text = ipc.read_text()
-          old = '''        let mut recognition = RecognitionOptions::default();
-          recognition.language_hint = language_hint;
-          '''
-          new = '''        let recognition = RecognitionOptions {
+          text, count = re.subn(
+              r'        let mut recognition = RecognitionOptions::default\(\);\n        recognition\.language_hint = language_hint;',
+              '''        let recognition = RecognitionOptions {
               language_hint,
               ..RecognitionOptions::default()
-          };
-          '''
-          if old not in text:
-              raise SystemExit('RecognitionOptions reassignment not found')
-          ipc.write_text(text.replace(old, new, 1))
+          };''',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'RecognitionOptions replacements: {count}')
+          ipc.write_text(text)
           PY
       - name: Install Rustfmt
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
