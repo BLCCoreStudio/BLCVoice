@@ -32,11 +32,6 @@ impl Default for AppSettings {
 
 impl AppSettings {
     #[must_use]
-    pub const fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-
-    #[must_use]
     pub fn selected_input_device_id(&self) -> Option<&str> {
         self.selected_input_device_id.as_deref()
     }
@@ -288,7 +283,7 @@ mod tests {
 
         let reopened = SettingsService::open(&directory).expect("settings must reopen");
         let settings = reopened.snapshot();
-        assert_eq!(settings.schema_version(), SETTINGS_SCHEMA_VERSION);
+        assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(settings.selected_input_device_id(), Some("mic-1"));
         assert_eq!(settings.selected_model_id(), Some("whisper-small-q5km"));
         assert_eq!(settings.language_hint(), Some("tr"));
