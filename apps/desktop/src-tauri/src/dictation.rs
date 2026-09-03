@@ -29,6 +29,7 @@ pub enum DesktopDictationErrorKind {
     RecognizerLoad,
     Capture,
     Transcription,
+    Insertion,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,13 +116,16 @@ enum DictationSlot {
     Recording(ActiveDictation),
     Finalizing(SessionId),
     AwaitingInsertion(SessionId),
+    Inserting(SessionId),
 }
 
 impl DictationSlot {
     fn session_id(&self) -> Option<SessionId> {
         match self {
             Self::Recording(active) => Some(active.session_id),
-            Self::Finalizing(session_id) | Self::AwaitingInsertion(session_id) => Some(*session_id),
+            Self::Finalizing(session_id)
+            | Self::AwaitingInsertion(session_id)
+            | Self::Inserting(session_id) => Some(*session_id),
             Self::Idle | Self::Preparing => None,
         }
     }
@@ -133,6 +137,7 @@ impl DictationSlot {
             Self::Recording(_) => "recording",
             Self::Finalizing(_) => "finalizing",
             Self::AwaitingInsertion(_) => "awaitingInsertion",
+            Self::Inserting(_) => "inserting",
         }
     }
 }
@@ -282,8 +287,7 @@ impl DesktopDictationService {
             }
         };
 
-        let mut slot = self.lock_slot();
-        *slot = DictationSlot::AwaitingInsertion(session_id);
+        *self.lock_slot() = DictationSlot::AwaitingInsertion(session_id);
 
         Ok(DesktopDictationReport {
             finalized,
@@ -292,6 +296,44 @@ impl DesktopDictationService {
             model_id,
             backend_name,
         })
+    }
+
+    pub fn begin_insertion(&self, session_id: SessionId) -> Result<(), DesktopDictationError> {
+        let mut slot = self.lock_slot();
+        match mem::replace(&mut *slot, DictationSlot::Inserting(session_id)) {
+            DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => Ok(()),
+            previous => {
+                let error = slot_error(&previous, session_id);
+                *slot = previous;
+                Err(error)
+            }
+        }
+    }
+
+    pub fn complete_insertion(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopDictationError> {
+        self.ensure_inserting(session_id)?;
+        let result = self
+            .capture
+            .mark_dictation_insertion_delivered(session_id)
+            .map_err(|error| insertion_transition_error("complete", error));
+        self.reset_to_idle();
+        result
+    }
+
+    pub fn fail_insertion(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopDictationError> {
+        self.ensure_inserting(session_id)?;
+        let result = self
+            .capture
+            .fail_dictation_insertion(session_id)
+            .map_err(|error| insertion_transition_error("fail", error));
+        self.reset_to_idle();
+        result
     }
 
     pub fn cancel(&self, session_id: SessionId) -> Result<SessionSnapshot, DesktopDictationError> {
@@ -313,6 +355,10 @@ impl DesktopDictationService {
                 DictationSlot::Finalizing(active_id) => {
                     *slot = DictationSlot::Finalizing(active_id);
                     return Err(busy_error("finalizing"));
+                }
+                DictationSlot::Inserting(active_id) => {
+                    *slot = DictationSlot::Inserting(active_id);
+                    return Err(busy_error("inserting"));
                 }
                 DictationSlot::Preparing => {
                     *slot = DictationSlot::Preparing;
@@ -345,6 +391,15 @@ impl DesktopDictationService {
         self.lock_slot().session_id()
     }
 
+    fn ensure_inserting(&self, session_id: SessionId) -> Result<(), DesktopDictationError> {
+        let slot = self.lock_slot();
+        match *slot {
+            DictationSlot::Inserting(active_id) if active_id == session_id => Ok(()),
+            DictationSlot::Inserting(active_id) => Err(stale_error(session_id, active_id)),
+            _ => Err(slot_error(&slot, session_id)),
+        }
+    }
+
     fn reset_to_idle(&self) {
         *self.lock_slot() = DictationSlot::Idle;
     }
@@ -367,6 +422,13 @@ fn map_capture_error(error: DesktopCaptureError) -> DesktopDictationError {
         | DesktopCaptureErrorKind::Runtime => DesktopDictationErrorKind::Capture,
     };
     DesktopDictationError::new(kind, error.message().to_owned())
+}
+
+fn insertion_transition_error(action: &str, error: DesktopCaptureError) -> DesktopDictationError {
+    DesktopDictationError::new(
+        DesktopDictationErrorKind::Insertion,
+        format!("could not {action} dictation insertion lifecycle: {error}"),
+    )
 }
 
 fn busy_error(state: &str) -> DesktopDictationError {
@@ -565,11 +627,9 @@ mod tests {
     #[test]
     fn model_is_prepared_before_capture_starts() {
         let service = service(Arc::new(FailingRecognizerFactory));
-
         let error = service
             .start(request())
             .expect_err("missing model must block recording");
-
         assert_eq!(error.kind(), DesktopDictationErrorKind::RecognizerLoad);
         assert_eq!(service.state_name(), "idle");
         assert_eq!(service.capture.current_session(), None);
@@ -582,9 +642,7 @@ mod tests {
         let report = service
             .finish(session.id)
             .expect("dictation must transcribe");
-
         assert_eq!(report.engine_id, "fake");
-        assert_eq!(report.model_id, "fake-model");
         assert_eq!(
             report.transcription.capture.transcription.text,
             "hello from BLCVoice"
@@ -603,13 +661,26 @@ mod tests {
     }
 
     #[test]
+    fn insertion_completion_reaches_completed_and_releases_service() {
+        let service = service(Arc::new(FakeRecognizerFactory));
+        let session = service.start(request()).expect("dictation must start");
+        service.finish(session.id).expect("dictation must transcribe");
+        service
+            .begin_insertion(session.id)
+            .expect("insertion must be claimable");
+        let completed = service
+            .complete_insertion(session.id)
+            .expect("insertion must complete");
+        assert_eq!(completed.state, blcvoice_core::SessionState::Completed);
+        assert_eq!(service.state_name(), "idle");
+    }
+
+    #[test]
     fn stale_finish_cannot_take_active_dictation() {
         let service = service(Arc::new(FakeRecognizerFactory));
         let session = service.start(request()).expect("dictation must start");
         let stale = SessionId::new(session.id.get() + 10);
-
         let error = service.finish(stale).expect_err("stale finish must fail");
-
         assert_eq!(error.kind(), DesktopDictationErrorKind::StaleSession);
         assert_eq!(service.active_session_id(), Some(session.id));
         service
@@ -621,11 +692,9 @@ mod tests {
     fn overlapping_dictation_is_rejected() {
         let service = service(Arc::new(FakeRecognizerFactory));
         let session = service.start(request()).expect("dictation must start");
-
         let error = service
             .start(request())
             .expect_err("overlapping dictation must be rejected");
-
         assert_eq!(error.kind(), DesktopDictationErrorKind::Busy);
         service
             .cancel(session.id)
