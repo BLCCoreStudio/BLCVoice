@@ -335,29 +335,6 @@ impl DesktopDictationService {
         result
     }
 
-    pub fn insertion_delivered(
-        &self,
-        session_id: SessionId,
-    ) -> Result<SessionSnapshot, DesktopDictationError> {
-        {
-            let slot = self.lock_slot();
-            match *slot {
-                DictationSlot::AwaitingInsertion(active_id) if active_id == session_id => {}
-                DictationSlot::AwaitingInsertion(active_id) => {
-                    return Err(stale_error(session_id, active_id));
-                }
-                _ => return Err(busy_error(slot.state_name())),
-            }
-        }
-
-        let result = self
-            .capture
-            .dictation_insertion_delivered(session_id)
-            .map_err(map_capture_error);
-        self.reset_to_idle();
-        result
-    }
-
     #[must_use]
     pub fn state_name(&self) -> &'static str {
         self.lock_slot().state_name()
@@ -618,10 +595,10 @@ mod tests {
         );
         assert_eq!(service.state_name(), "awaitingInsertion");
 
-        let completed = service
-            .insertion_delivered(session.id)
-            .expect("insertion acknowledgement must complete lifecycle");
-        assert_eq!(completed.state, blcvoice_core::SessionState::Completed);
+        let cancelled = service
+            .cancel(session.id)
+            .expect("pending insertion dictation must remain cancellable");
+        assert_eq!(cancelled.state, blcvoice_core::SessionState::Cancelled);
         assert_eq!(service.state_name(), "idle");
     }
 

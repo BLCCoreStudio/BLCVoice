@@ -351,8 +351,10 @@ pub async fn dictation_start(
                 error.to_string(),
             )
         })?;
-        let mut recognition = RecognitionOptions::default();
-        recognition.language_hint = language_hint;
+        let recognition = RecognitionOptions {
+            language_hint,
+            ..RecognitionOptions::default()
+        };
         dictation
             .start(DesktopDictationRequest {
                 device_id,

@@ -199,15 +199,6 @@ impl DesktopCaptureService {
         self.cancel_session(session_id)
     }
 
-    pub fn dictation_insertion_delivered(
-        &self,
-        session_id: SessionId,
-    ) -> Result<SessionSnapshot, DesktopCaptureError> {
-        self.runtime
-            .insertion_delivered(session_id)
-            .map_err(DesktopCaptureError::from)
-    }
-
     fn start_capture(
         &self,
         device_id: AudioDeviceId,
