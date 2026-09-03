@@ -2,12 +2,14 @@
 
 mod capture;
 mod dictation;
+mod insertion;
 mod ipc;
 mod shortcut;
 
 use ipc::{
     DesktopState, audio_input_discovery, desktop_status, dictation_cancel, dictation_finish,
-    dictation_start, microphone_test_cancel, microphone_test_finish, microphone_test_start,
+    dictation_start, insertion_capability, microphone_test_cancel, microphone_test_finish,
+    microphone_test_start,
 };
 use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};
 
@@ -35,6 +37,7 @@ pub fn run() {
             dictation_start,
             dictation_finish,
             dictation_cancel,
+            insertion_capability,
             shortcut_capability,
         ])
         .run(tauri::generate_context!())

@@ -10,7 +10,7 @@ use blcvoice_audio::{
     AudioDeviceId, CaptureBufferConfig, InputCaptureFactory, InputCaptureRequest,
     InputDeviceDiscovery, InputDiscovery,
 };
-use blcvoice_core::{SessionId, SessionSnapshot, SessionState};
+use blcvoice_core::{FailureStage, SessionId, SessionSnapshot, SessionState};
 use blcvoice_runtime::{DictationRuntime, FinalizationReport, RuntimeError, RuntimeTranscription};
 
 const CAPTURE_PUMP_INTERVAL: Duration = Duration::from_millis(10);
@@ -189,6 +189,24 @@ impl DesktopCaptureService {
     ) -> Result<SessionSnapshot, DesktopCaptureError> {
         self.runtime
             .fail_recognition(session_id)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    pub fn mark_dictation_insertion_delivered(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.runtime
+            .insertion_delivered(session_id)
+            .map_err(DesktopCaptureError::from)
+    }
+
+    pub fn fail_dictation_insertion(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SessionSnapshot, DesktopCaptureError> {
+        self.runtime
+            .fail(session_id, FailureStage::TextInsertion)
             .map_err(DesktopCaptureError::from)
     }
 

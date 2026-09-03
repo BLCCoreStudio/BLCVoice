@@ -14,6 +14,7 @@ members = [
   "crates/blcvoice-insertion",
   "crates/blcvoice-insertion-eis",
   "crates/blcvoice-insertion-x11",
+  "crates/blcvoice-insertion-native",
   "apps/desktop/src-tauri",
 ]
 

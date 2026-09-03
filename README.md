@@ -6,7 +6,11 @@ BLCVoice is an early-stage open-source desktop dictation project focused on a si
 
 ## Status
 
-BLCVoice is in **pre-alpha development**. The repository now contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, a native microphone capture bridge and a usable microphone-selection/test screen. Global-shortcut semantics, capability-driven backend resolution and desktop registration infrastructure are implemented: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal. A production desktop dictation service prepares the local recognizer before recording, shares the same exclusive capture lifecycle as microphone testing, finalizes captured audio, preprocesses it to the recognizer's required format and produces a transcript that stops truthfully at the pending text-insertion stage. Runtime-independent text-insertion capability contracts select explicit Windows, macOS, X11 and Wayland delivery strategies while keeping permission requirements and delivery semantics visible. Concrete insertion adapters now exist for Linux/Wayland and Linux/X11. Wayland uses the XDG RemoteDesktop portal and EIS `ei_text`; X11 uses XTEST with a temporary, restored Unicode keysym mapping on an otherwise unused keycode. Both adapters are compiled and linted in CI, but neither is yet wired into production dictation or claimed as end-to-end desktop validated. Windows and macOS insertion adapters, model management, VAD, insertion wiring and a production-ready dictation UI are still incomplete, and there are no production-ready releases.
+BLCVoice is in **pre-alpha development**. The repository contains the Rust/Tauri desktop foundation, a bounded dictation lifecycle, cross-platform microphone discovery/capture adapters, audio preprocessing, engine-agnostic ASR contracts, a transcribe.cpp adapter, runtime-level capture-to-ASR orchestration, native microphone capture and a microphone-selection/test screen. Global-shortcut registration is capability-driven: Windows/macOS and Linux/X11 use the native global-hotkey path, while Linux/Wayland uses the compositor-mediated XDG GlobalShortcuts portal.
+
+The production desktop dictation command path now reaches a real terminal lifecycle: it prepares the local recognizer before recording, captures and finalizes audio, preprocesses it to the recognizer format, transcribes it, selects a platform insertion backend, submits the complete transcript and commits `Completed` only after the backend accepts the full submission. Windows/macOS use a native Unicode insertion adapter, Linux/X11 uses XTEST with a temporary restored Unicode keysym mapping, and Linux/Wayland uses XDG RemoteDesktop + EIS `ei_text` without root/raw-input fallbacks. Insertion failures are recorded as `TextInsertion` failures and return the transcript as recoverable text. A successful backend receipt still does **not** claim that an arbitrary target application's document mutation is semantically observable.
+
+The global shortcut is not yet connected to the configured production dictation path, and automatic model management, VAD, persistent production settings, local history, the lightweight dictation overlay and release packaging are still incomplete. Platform adapters are compiled and linted continuously in CI; real application compatibility remains a separate runtime-validation requirement.
 
 ## Product principles
 
@@ -15,7 +19,7 @@ BLCVoice is in **pre-alpha development**. The repository now contains the Rust/T
 - **Engine-agnostic.** The application core must not be coupled to a single speech-recognition model or runtime.
 - **Cross-platform by capability.** Windows, Linux/X11 and Linux/Wayland are treated as distinct capability environments rather than hidden behind one generic platform flag.
 - **Minimal permissions.** Microphone, text insertion, integrations, history and future agent access are scoped independently.
-- **Measured reliability.** Capturing audio, transcription and text delivery are separate pipeline stages; an attempted insertion is not treated as a confirmed delivery.
+- **Measured reliability.** Capturing audio, transcription and text delivery are separate pipeline stages; an attempted insertion is not treated as confirmed semantic delivery.
 
 ## Initial scope
 
@@ -42,11 +46,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system boundaries and [do
 The current foundation pins Rust 1.98.0. On Linux, install the Tauri 2 and native audio system prerequisites for your distribution before building the desktop shell.
 
 ```bash
-cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 --all-targets
+cargo test -p blcvoice-core -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native --all-targets
 cargo run -p blcvoice-desktop
 ```
 
-CI validates the runtime-independent core and insertion contracts on Linux, Windows and macOS, builds/lints the Wayland EIS and X11 XTEST adapters through their cross-platform crate boundaries, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux, Windows and macOS.
+CI validates the runtime-independent core and insertion contracts on Linux, Windows and macOS, builds/lints the Wayland EIS, X11 XTEST and native Windows/macOS insertion adapters through their cross-platform crate boundaries, validates native audio and ASR adapters on all three platforms, checks the static desktop JavaScript/configuration, and tests/lints the desktop shell on Linux, Windows and macOS. Linux also runs the X11 adapter against a live Xvfb/XTEST server.
 
 ## Contributing
 

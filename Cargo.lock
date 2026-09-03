@@ -311,6 +311,11 @@ dependencies = [
  "blcvoice-audio",
  "blcvoice-audio-cpal",
  "blcvoice-core",
+ "blcvoice-insertion",
+ "blcvoice-insertion-eis",
+ "blcvoice-insertion-native",
+ "blcvoice-insertion-x11",
+ "blcvoice-platform",
  "blcvoice-runtime",
  "blcvoice-shortcuts",
  "futures-util",
@@ -347,6 +352,14 @@ dependencies = [
  "reis",
  "rustix",
  "tokio",
+]
+
+[[package]]
+name = "blcvoice-insertion-native"
+version = "0.1.0"
+dependencies = [
+ "blcvoice-insertion",
+ "enigo",
 ]
 
 [[package]]
@@ -1096,6 +1109,25 @@ name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
+
+[[package]]
+name = "enigo"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71c6c56e50f7acae2906a0dcbb34529ca647e40421119ad5d12e7f8ba6e50010"
+dependencies = [
+ "core-foundation",
+ "core-graphics",
+ "foreign-types-shared",
+ "libc",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "windows 0.61.3",
+ "xkbcommon",
+ "xkeysym",
+]
 
 [[package]]
 name = "enum-primitive-derive"
@@ -2343,6 +2375,15 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "memoffset"
@@ -5514,6 +5555,17 @@ name = "x11rb-protocol"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acf4d1bc32aa46eec18caa634ec3cf4c05bfa151f12b93b510b15190f69a1ca8"
+
+[[package]]
+name = "xkbcommon"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a974f48060a14e95705c01f24ad9c3345022f4d97441b8a36beb7ed5c4a02d"
+dependencies = [
+ "libc",
+ "memmap2",
+ "xkeysym",
+]
 
 [[package]]
 name = "xkeysym"
