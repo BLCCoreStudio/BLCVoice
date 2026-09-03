@@ -1,0 +1,41 @@
+name: Prepare Wayland EIS adapter
+
+on:
+  push:
+    branches:
+      - feat/wayland-eis-insertion
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/wayland-eis-insertion
+          persist-credentials: true
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Regenerate lockfile
+        run: cargo +1.98.0 generate-lockfile
+      - name: Format workspace
+        run: cargo +1.98.0 fmt --all
+      - name: Check EIS adapter
+        run: cargo +1.98.0 check -p blcvoice-insertion-eis --all-targets
+      - name: Lint EIS adapter
+        run: cargo +1.98.0 clippy -p blcvoice-insertion-eis --all-targets -- -D warnings
+      - name: Remove helper and commit generated files
+        shell: bash
+        run: |
+          rm .github/workflows/zz-wayland-eis-prepare.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "build: prepare Wayland EIS adapter"
+          git push origin HEAD:feat/wayland-eis-insertion
