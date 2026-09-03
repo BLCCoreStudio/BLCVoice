@@ -1,0 +1,59 @@
+name: Integrate local history
+
+on:
+  push:
+    branches:
+      - work/local-history
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            cmake \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libpulse-dev
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Apply local history integration
+        run: python3 scripts/_integrate_local_history.py
+      - name: Format and validate frontend
+        run: |
+          cargo +1.98.0 fmt --all
+          node --check apps/desktop/ui/app.js
+          node --check apps/desktop/ui/history.js
+          node --check apps/desktop/ui/overlay.js
+          python3 -m json.tool apps/desktop/src-tauri/tauri.conf.json > /dev/null
+      - name: Test desktop integration
+        run: cargo +1.98.0 test -p blcvoice-desktop --all-targets
+      - name: Lint desktop integration
+        run: cargo +1.98.0 clippy -p blcvoice-desktop --all-targets -- -D warnings
+      - name: Commit validated product changes
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git rm .github/workflows/_integrate_local_history.yml scripts/_integrate_local_history.py
+          git add .github/workflows/ci.yml apps/desktop/src-tauri/src/history.rs apps/desktop/src-tauri/src/settings.rs apps/desktop/src-tauri/src/ipc.rs apps/desktop/src-tauri/src/lib.rs apps/desktop/ui/index.html apps/desktop/ui/app.js apps/desktop/ui/history.js apps/desktop/ui/styles.css
+          git commit -m "feat: add opt-in local transcript history"
+          git push
