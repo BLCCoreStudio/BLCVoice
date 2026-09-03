@@ -45,7 +45,7 @@ jobs:
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Test platform-independent core
-        run: cargo +1.98.0 test --locked -p blcvoice-core -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native --all-targets
+        run: cargo +1.98.0 test --locked -p blcvoice-core -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native -p blcvoice-endpointer --all-targets
 
   quality:
     name: Rust quality
@@ -60,7 +60,7 @@ jobs:
       - name: Check formatting
         run: cargo +1.98.0 fmt --all -- --check
       - name: Run Clippy on runtime-independent crates
-        run: cargo +1.98.0 clippy --locked -p blcvoice-core -p blcvoice-audio -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native --all-targets -- -D warnings
+        run: cargo +1.98.0 clippy --locked -p blcvoice-core -p blcvoice-audio -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native -p blcvoice-endpointer --all-targets -- -D warnings
 
   x11-insertion:
     name: X11 insertion smoke
