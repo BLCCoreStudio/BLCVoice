@@ -104,10 +104,7 @@ impl std::error::Error for InsertionCapabilityError {}
 pub const fn resolve_insertion_capability(
     environment: InsertionEnvironment,
 ) -> Result<InsertionCapability, InsertionCapabilityError> {
-    match (
-        environment.platform(),
-        environment.linux_display_server(),
-    ) {
+    match (environment.platform(), environment.linux_display_server()) {
         (DesktopPlatform::Windows, _) => Ok(InsertionCapability::new(
             InsertionBackend::WindowsSendInput,
             InsertionAuthorization::None,
@@ -268,10 +265,7 @@ mod tests {
         ))
         .expect("Wayland insertion should resolve");
 
-        assert_eq!(
-            capability.backend(),
-            InsertionBackend::XdgRemoteDesktopEis
-        );
+        assert_eq!(capability.backend(), InsertionBackend::XdgRemoteDesktopEis);
         assert_eq!(
             capability.authorization(),
             InsertionAuthorization::XdgRemoteDesktop

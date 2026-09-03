@@ -2,73 +2,16 @@
 
 use core::fmt;
 
+use blcvoice_platform::{DesktopEnvironment, current_desktop_environment};
+pub use blcvoice_platform::{DesktopPlatform, LinuxDisplayServer, detect_linux_display_server};
+
+pub type ShortcutEnvironment = DesktopEnvironment;
+
 /// Default BLCVoice dictation shortcut in the XDG shortcuts syntax.
 pub const DEFAULT_DICTATION_TRIGGER: &str = "CTRL+SHIFT+space";
 
 /// Stable application-level identifier used by native shortcut backends.
 pub const DICTATION_SHORTCUT_ID: &str = "dictation.toggle";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DesktopPlatform {
-    Windows,
-    MacOs,
-    Linux,
-    Other,
-}
-
-impl fmt::Display for DesktopPlatform {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Windows => formatter.write_str("windows"),
-            Self::MacOs => formatter.write_str("macos"),
-            Self::Linux => formatter.write_str("linux"),
-            Self::Other => formatter.write_str("other"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinuxDisplayServer {
-    X11,
-    Wayland,
-    Unknown,
-}
-
-impl fmt::Display for LinuxDisplayServer {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::X11 => formatter.write_str("x11"),
-            Self::Wayland => formatter.write_str("wayland"),
-            Self::Unknown => formatter.write_str("unknown"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShortcutEnvironment {
-    platform: DesktopPlatform,
-    linux_display_server: LinuxDisplayServer,
-}
-
-impl ShortcutEnvironment {
-    #[must_use]
-    pub const fn new(platform: DesktopPlatform, linux_display_server: LinuxDisplayServer) -> Self {
-        Self {
-            platform,
-            linux_display_server,
-        }
-    }
-
-    #[must_use]
-    pub const fn platform(&self) -> DesktopPlatform {
-        self.platform
-    }
-
-    #[must_use]
-    pub const fn linux_display_server(&self) -> LinuxDisplayServer {
-        self.linux_display_server
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShortcutBackend {
@@ -130,75 +73,11 @@ pub const fn resolve_shortcut_backend(
     }
 }
 
-/// Detect the effective Linux display server from standard desktop-session facts.
-///
-/// `XDG_SESSION_TYPE` wins when it explicitly identifies X11 or Wayland. When it
-/// is absent or inconclusive, the display socket variables are used as evidence.
-#[must_use]
-pub fn detect_linux_display_server(
-    xdg_session_type: Option<&str>,
-    wayland_display: Option<&str>,
-    x11_display: Option<&str>,
-) -> LinuxDisplayServer {
-    if let Some(session_type) = non_empty(xdg_session_type) {
-        if session_type.eq_ignore_ascii_case("wayland") {
-            return LinuxDisplayServer::Wayland;
-        }
-        if session_type.eq_ignore_ascii_case("x11") {
-            return LinuxDisplayServer::X11;
-        }
-    }
-
-    if non_empty(wayland_display).is_some() {
-        return LinuxDisplayServer::Wayland;
-    }
-    if non_empty(x11_display).is_some() {
-        return LinuxDisplayServer::X11;
-    }
-
-    LinuxDisplayServer::Unknown
-}
-
 /// Inspect the current process environment and return the platform facts needed
 /// by the shortcut backend resolver.
 #[must_use]
 pub fn current_shortcut_environment() -> ShortcutEnvironment {
-    current_shortcut_environment_impl()
-}
-
-#[cfg(target_os = "windows")]
-fn current_shortcut_environment_impl() -> ShortcutEnvironment {
-    ShortcutEnvironment::new(DesktopPlatform::Windows, LinuxDisplayServer::Unknown)
-}
-
-#[cfg(target_os = "macos")]
-fn current_shortcut_environment_impl() -> ShortcutEnvironment {
-    ShortcutEnvironment::new(DesktopPlatform::MacOs, LinuxDisplayServer::Unknown)
-}
-
-#[cfg(target_os = "linux")]
-fn current_shortcut_environment_impl() -> ShortcutEnvironment {
-    let xdg_session_type = std::env::var("XDG_SESSION_TYPE").ok();
-    let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
-    let x11_display = std::env::var("DISPLAY").ok();
-
-    ShortcutEnvironment::new(
-        DesktopPlatform::Linux,
-        detect_linux_display_server(
-            xdg_session_type.as_deref(),
-            wayland_display.as_deref(),
-            x11_display.as_deref(),
-        ),
-    )
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn current_shortcut_environment_impl() -> ShortcutEnvironment {
-    ShortcutEnvironment::new(DesktopPlatform::Other, LinuxDisplayServer::Unknown)
-}
-
-fn non_empty(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
+    current_desktop_environment()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -329,6 +329,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blcvoice-insertion"
+version = "0.1.0"
+dependencies = [
+ "blcvoice-platform",
+]
+
+[[package]]
+name = "blcvoice-platform"
+version = "0.1.0"
+
+[[package]]
 name = "blcvoice-runtime"
 version = "0.1.0"
 dependencies = [
@@ -341,6 +352,9 @@ dependencies = [
 [[package]]
 name = "blcvoice-shortcuts"
 version = "0.1.0"
+dependencies = [
+ "blcvoice-platform",
+]
 
 [[package]]
 name = "block-buffer"
