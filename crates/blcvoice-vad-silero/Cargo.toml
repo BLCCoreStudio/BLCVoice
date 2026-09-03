@@ -1,0 +1,15 @@
+[package]
+name = "blcvoice-vad-silero"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Silero voice activity detection adapter for BLCVoice"
+
+[dependencies]
+blcvoice-vad = { path = "../blcvoice-vad" }
+silero-vad-crs = "=0.4.0"
+
+[lints]
+workspace = true

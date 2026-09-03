@@ -418,6 +418,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "blcvoice-vad"
+version = "0.1.0"
+
+[[package]]
+name = "blcvoice-vad-silero"
+version = "0.1.0"
+dependencies = [
+ "blcvoice-vad",
+ "silero-vad-crs",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4064,6 +4076,15 @@ checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
  "errno",
  "libc",
+]
+
+[[package]]
+name = "silero-vad-crs"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b06646d849c282653d0e317cb066d22d14c51793f81067586f414ae9688a6fad"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
