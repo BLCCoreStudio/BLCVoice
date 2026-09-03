@@ -11,7 +11,7 @@ description = "Wayland XDG RemoteDesktop/libei text insertion adapter for BLCVoi
 blcvoice-insertion = { path = "../blcvoice-insertion" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { version = "0.13.13", default-features = false, features = ["remote_desktop", "tokio"] }
+ashpd = { version = "0.13.13", default-features = false, features = ["remote_desktop", "screencast", "tokio"] }
 futures-util = "0.3"
 reis = { version = "0.7.1", features = ["tokio"] }
 rustix = { version = "1", features = ["time"] }
