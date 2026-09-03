@@ -1,0 +1,30 @@
+name: Fix dashboard shortcut ownership
+
+on:
+  push:
+    branches:
+      - feat/dashboard-shortcut-events
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Apply ownership fix
+        run: python3 scripts/_fix_dashboard_shortcut_ownership.py
+      - name: Validate JavaScript
+        run: node --check apps/desktop/ui/app.js
+      - name: Commit clean product change
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git rm .github/workflows/_fix_dashboard_shortcut_ownership.yml scripts/_fix_dashboard_shortcut_ownership.py
+          git add apps/desktop/ui/app.js
+          git commit -m "fix: keep shortcut dictation backend-owned in dashboard"
+          git push
