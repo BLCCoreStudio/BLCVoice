@@ -145,9 +145,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate desktop UI JavaScript
-        run: node --check apps/desktop/ui/app.js
+        run: |
+          node --check apps/desktop/ui/app.js
+          node --check apps/desktop/ui/overlay.js
       - name: Validate Tauri configuration JSON
-        run: python3 -m json.tool apps/desktop/src-tauri/tauri.conf.json > /dev/null
+        run: |
+          python3 -m json.tool apps/desktop/src-tauri/tauri.conf.json > /dev/null
+          python3 -m json.tool apps/desktop/src-tauri/capabilities/default.json > /dev/null
+          python3 -m json.tool apps/desktop/src-tauri/capabilities/overlay.json > /dev/null
       - name: Install Tauri and audio prerequisites
         run: |
           sudo apt-get update
