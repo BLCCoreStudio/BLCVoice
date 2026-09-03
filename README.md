@@ -10,7 +10,7 @@ BLCVoice is in **pre-alpha development**. The repository contains the Rust/Tauri
 
 The production desktop dictation command path now reaches a real terminal lifecycle: it prepares the local recognizer before recording, captures and finalizes audio, preprocesses it to the recognizer format, transcribes it, selects a platform insertion backend, submits the complete transcript and commits `Completed` only after the backend accepts the full submission. Windows/macOS use a native Unicode insertion adapter, Linux/X11 uses XTEST with a temporary restored Unicode keysym mapping, and Linux/Wayland uses XDG RemoteDesktop + EIS `ei_text` without root/raw-input fallbacks. Insertion failures are recorded as `TextInsertion` failures and return the transcript as recoverable text. A successful backend receipt still does **not** claim that an arbitrary target application's document mutation is semantically observable.
 
-The global shortcut is not yet connected to the configured production dictation path, and automatic model management, VAD, persistent production settings, local history, the lightweight dictation overlay and release packaging are still incomplete. Platform adapters are continuously compiled/linted in CI; real application compatibility remains a separate runtime-validation requirement.
+The global shortcut is not yet connected to the configured production dictation path, and automatic model management, VAD, persistent production settings, local history, the lightweight dictation overlay and release packaging are still incomplete. Platform adapters are compiled and linted continuously in CI; real application compatibility remains a separate runtime-validation requirement.
 
 ## Product principles
 
