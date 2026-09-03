@@ -1,0 +1,36 @@
+name: X11 insertion prepare
+
+on:
+  push:
+    branches:
+      - feat/x11-text-insertion
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/x11-text-insertion
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Resolve dependencies and test X11 adapter
+        run: cargo +1.98.0 test -p blcvoice-insertion-x11 --all-targets
+      - name: Format workspace
+        run: cargo +1.98.0 fmt --all
+      - name: Lint X11 adapter
+        run: cargo +1.98.0 clippy -p blcvoice-insertion-x11 --all-targets -- -D warnings
+      - name: Commit generated files and remove helper
+        run: |
+          rm .github/workflows/x11-prepare.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock crates/blcvoice-insertion-x11/src/lib.rs .github/workflows/x11-prepare.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: prepare X11 insertion adapter'
+            git push origin HEAD:feat/x11-text-insertion
+          fi
