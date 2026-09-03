@@ -14,7 +14,9 @@ pub const DICTATION_LIFECYCLE_EVENT: &str = "blcvoice://dictation-lifecycle";
 enum CoordinatorState {
     #[default]
     Idle,
-    Starting { stop_requested: bool },
+    Starting {
+        stop_requested: bool,
+    },
     Recording(SessionId),
     Finishing(SessionId),
 }
@@ -74,16 +76,10 @@ impl ShortcutDictationCoordinator {
                         .complete_start(session_id)
                     {
                         StartCompletion::Recording => {
-                            emit_lifecycle(
-                                &app,
-                                DictationLifecycleEventDto::recording(session_id),
-                            );
+                            emit_lifecycle(&app, DictationLifecycleEventDto::recording(session_id));
                         }
                         StartCompletion::FinishImmediately => {
-                            emit_lifecycle(
-                                &app,
-                                DictationLifecycleEventDto::recording(session_id),
-                            );
+                            emit_lifecycle(&app, DictationLifecycleEventDto::recording(session_id));
                             spawn_finish(app, session_id);
                         }
                         StartCompletion::CancelUnexpected => {
@@ -193,10 +189,7 @@ impl ShortcutDictationCoordinator {
 }
 
 fn spawn_finish<R: Runtime>(app: AppHandle<R>, session_id: SessionId) {
-    emit_lifecycle(
-        &app,
-        DictationLifecycleEventDto::finishing(session_id),
-    );
+    emit_lifecycle(&app, DictationLifecycleEventDto::finishing(session_id));
     tauri::async_runtime::spawn(async move {
         let worker_app = app.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
