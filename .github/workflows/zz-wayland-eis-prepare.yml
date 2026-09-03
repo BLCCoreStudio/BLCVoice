@@ -19,6 +19,62 @@ jobs:
           persist-credentials: true
       - name: Install Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Apply compile fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/blcvoice-insertion-eis/src/lib.rs")
+          text = path.read_text()
+          text = text.replace(
+              ".set_devices(PortalDeviceType::Keyboard)",
+              ".set_devices(enumflags2::BitFlags::from_flag(PortalDeviceType::Keyboard))",
+          )
+
+          old_ready = '''                let event = events.next().await.ok_or_else(|| {
+                    InsertionError::new(
+                        InsertionErrorKind::BackendUnavailable,
+                        "the EIS event stream closed before a text device became available",
+                    )
+                })??;'''
+          new_ready = '''                let event = events
+                    .next()
+                    .await
+                    .ok_or_else(|| {
+                        InsertionError::new(
+                            InsertionErrorKind::BackendUnavailable,
+                            "the EIS event stream closed before a text device became available",
+                        )
+                    })?
+                    .map_err(|error| {
+                        backend_failure(format!("failed to read an EIS readiness event: {error}"))
+                    })?;'''
+          if old_ready not in text:
+              raise SystemExit("readiness event block not found")
+          text = text.replace(old_ready, new_ready, 1)
+
+          old_live = '''                    let event = event.ok_or_else(|| {
+                        InsertionError::new(
+                            InsertionErrorKind::BackendUnavailable,
+                            "the EIS event stream closed",
+                        )
+                    })??;'''
+          new_live = '''                    let event = event
+                        .ok_or_else(|| {
+                            InsertionError::new(
+                                InsertionErrorKind::BackendUnavailable,
+                                "the EIS event stream closed",
+                            )
+                        })?
+                        .map_err(|error| {
+                            backend_failure(format!("failed to read an EIS event: {error}"))
+                        })?;'''
+          if old_live not in text:
+              raise SystemExit("live event block not found")
+          text = text.replace(old_live, new_live, 1)
+          path.write_text(text)
+          PY
       - name: Regenerate lockfile
         run: cargo +1.98.0 generate-lockfile
       - name: Format workspace
