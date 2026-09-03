@@ -43,6 +43,16 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Private local desktop voice dictation",
+    "longDescription": "BLCVoice provides local-first desktop voice dictation with native microphone capture, offline speech recognition and capability-aware text insertion.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
   }
 }

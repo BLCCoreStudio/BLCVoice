@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-03 against `main` at `a2470984fd7aae84eccb80729fa419c38dcaae82` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-03 against `main` at `64f9bcc6e4b634aa72ab7c21adf64747f2bd8155` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -20,17 +20,20 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - capability-driven Windows/macOS, Linux/X11 and Linux/Wayland text-insertion adapters;
 - production shortcut-to-dictation wiring;
 - lightweight dictation overlay and tray-resident behavior;
-- engine-agnostic Silero VAD integrated into production dictation.
+- engine-agnostic Silero VAD integrated into production dictation;
+- the canonical autonomous-development/source-of-truth operating layer.
 
 Compatibility claims remain evidence-based. Compile/lint/unit coverage is not equivalent to real desktop-session validation.
 
 ## Active pull requests
 
 1. **PR #41 — `build: add cross-platform desktop bundle pipeline`**
-   - Adds Linux, Windows and macOS bundle generation plus draft prerelease mechanics.
-   - Signing/notarization stays outside the repository trust boundary.
-   - Current head: `170280cb2d8dabc6503eb135020fbfc74b42be0d`.
-   - Current PR CI run `33790324156` concluded `action_required`; this must be resolved before the PR can count as complete.
+   - Current priority.
+   - The previous CI run `33790324156` ended `action_required` before creating jobs. Its actor and triggering actor were `github-actions[bot]`, matching GitHub's recursion-protection behavior for workflow-triggered pull-request activity using `GITHUB_TOKEN`; this was not an application test failure.
+   - The branch is being reconciled onto current `main` and upgraded to make bundle validation run directly on pull requests/manual dispatch with read-only permissions.
+   - Packaging policy: Linux x64 `.deb`/`.AppImage` on Ubuntu 22.04, Windows x64 NSIS on Windows Server 2025, and macOS arm64/x64 `.app`/`.dmg` on explicit macOS 15 runners.
+   - macOS validation/draft artifacts use ad-hoc signing only. Production signing/notarization remains outside the autonomous trust boundary.
+   - ADR 0026 in this PR records the material packaging/release trust-boundary decision.
 
 2. **PR #17 — `chore: establish maintainer automation baseline`**
    - Adds CODEOWNERS/support/conduct/security-audit/release-note maintenance infrastructure.
@@ -51,7 +54,6 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 - The protected-branch required-check list does not yet cover every critical CI job; issue #42 owns the reconciliation.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Reproducible model/runtime latency, real-time factor, resource-use and later accuracy evidence is not yet a canonical benchmark system; issue #43 owns that foundation.
-- `README.md` previously duplicated fast-moving implementation status and had drifted behind `main`; it should now point here for current state instead of becoming a second state tracker.
 
 ## Next safe task
 
@@ -59,14 +61,14 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 Exact next action:
 
-1. Diagnose why PR #41 CI run `33790324156` is `action_required`.
-2. Restore a normal runnable CI path and make every applicable critical check pass.
-3. Validate the bundle pipeline produces the intended Linux `.deb`/`.AppImage`, Windows NSIS and macOS `.app`/`.dmg` artifacts without claiming signing/notarization.
-4. Review packaging failure modes and trust-boundary wording.
-5. Merge only when repository/review/critical-CI gates pass.
-6. Do **not** configure production signing/notarization credentials or publish a production release; those are mandatory stop gates.
+1. Run the normal CI matrix from a non-recursive PR update and require every applicable critical job to pass.
+2. Run the PR bundle-validation matrix and verify uploaded artifacts for Linux `.deb`/`.AppImage`, Windows NSIS, macOS arm64 `.app`/`.dmg`, and macOS x64 `.app`/`.dmg`.
+3. Inspect bundle failures, architecture-specific failures and packaging logs; fix only with current upstream evidence.
+4. Confirm release-write permission exists only on tag-triggered draft-release jobs.
+5. Merge PR #41 only when normal CI, bundle validation, review-thread and architecture/ADR documentation gates are green.
+6. Do **not** configure production signing/notarization credentials or publish a production release.
 
-After #41 is safely completed, reconcile and finish PR #17 if it is still applicable. Then select from issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
+After #41 is safely merged, reconcile `PROJECT_STATE.md` to remove it from active work and make PR #17 the next safe task if it is still applicable. Then continue through issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
 
 ## Mandatory external gates
 
