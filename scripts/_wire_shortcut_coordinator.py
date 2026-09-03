@@ -65,7 +65,7 @@ if needle not in s:
     raise SystemExit("DictationReportDto impl not found")
 s = s.replace(needle, replacement, 1)
 
-marker = '''#[derive(Debug, Serialize)]
+marker = '''#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandErrorDto'''
 helper_impl = r'''
