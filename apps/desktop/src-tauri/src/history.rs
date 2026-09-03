@@ -25,13 +25,6 @@ pub struct HistoryEntry {
     semantic_delivery_verified: bool,
 }
 
-impl HistoryEntry {
-    #[must_use]
-    pub const fn id(&self) -> u64 {
-        self.id
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct NewHistoryEntry {
     pub text: String,
@@ -119,34 +112,20 @@ pub struct HistoryService {
 }
 
 impl HistoryService {
-    pub fn open(data_dir: impl Into<PathBuf>) -> Result<Self, HistoryError> {
-        let data_dir = data_dir.into();
-        fs::create_dir_all(&data_dir).map_err(|error| {
-            HistoryError::new(format!(
-                "could not create BLCVoice data directory {}: {error}",
-                data_dir.display()
-            ))
-        })?;
+    pub fn open(data_dir: PathBuf) -> Result<Self, HistoryError> {
         let path = data_dir.join(HISTORY_FILE_NAME);
-        let mut document = match fs::read(&path) {
-            Ok(bytes) => match serde_json::from_slice::<HistoryDocument>(&bytes) {
-                Ok(document) => document,
-                Err(error) => {
-                    preserve_corrupt_history(&path)?;
-                    eprintln!("BLCVoice preserved an unreadable history file: {error}");
-                    HistoryDocument::default()
-                }
-            },
-            Err(error) if error.kind() == io::ErrorKind::NotFound => HistoryDocument::default(),
-            Err(error) => {
-                return Err(HistoryError::new(format!(
-                    "could not read BLCVoice history {}: {error}",
-                    path.display()
-                )));
-            }
-        };
+        let mut document = load_document(&path)?;
         document.normalize()?;
+        Ok(Self {
+            path,
+            state: Mutex::new(document),
+        })
+    }
 
+    #[cfg(test)]
+    fn open_at(path: PathBuf) -> Result<Self, HistoryError> {
+        let mut document = load_document(&path)?;
+        document.normalize()?;
         Ok(Self {
             path,
             state: Mutex::new(document),
@@ -158,42 +137,43 @@ impl HistoryService {
         self.lock_state().entries.clone()
     }
 
-    pub fn append(&self, new_entry: NewHistoryEntry) -> Result<HistoryEntry, HistoryError> {
-        if new_entry.text.is_empty() {
-            return Err(HistoryError::new("history transcript cannot be empty"));
-        }
+    pub fn append(&self, entry: NewHistoryEntry) -> Result<HistoryEntry, HistoryError> {
         let mut state = self.lock_state();
         let id = state.next_id;
-        state.next_id = id
+        state.next_id = state
+            .next_id
             .checked_add(1)
             .ok_or_else(|| HistoryError::new("history entry id space exhausted"))?;
         let entry = HistoryEntry {
             id,
             created_at_unix_ms: unix_time_ms()?,
-            text: new_entry.text,
-            detected_language: new_entry.detected_language,
-            engine_id: new_entry.engine_id,
-            model_id: new_entry.model_id,
-            insertion_backend: new_entry.insertion_backend,
-            semantic_delivery_verified: new_entry.semantic_delivery_verified,
+            text: entry.text,
+            detected_language: entry.detected_language,
+            engine_id: entry.engine_id,
+            model_id: entry.model_id,
+            insertion_backend: entry.insertion_backend,
+            semantic_delivery_verified: entry.semantic_delivery_verified,
         };
+        if entry.text.is_empty() {
+            return Err(HistoryError::new("history text cannot be empty"));
+        }
         state.entries.insert(0, entry.clone());
         if state.entries.len() > MAX_HISTORY_ENTRIES {
             state.entries.truncate(MAX_HISTORY_ENTRIES);
         }
-        write_history(&self.path, &state)?;
+        persist_document(&self.path, &state)?;
         Ok(entry)
     }
 
     pub fn delete(&self, id: u64) -> Result<bool, HistoryError> {
         let mut state = self.lock_state();
-        let before = state.entries.len();
+        let original_len = state.entries.len();
         state.entries.retain(|entry| entry.id != id);
-        let changed = state.entries.len() != before;
-        if changed {
-            write_history(&self.path, &state)?;
+        let removed = state.entries.len() != original_len;
+        if removed {
+            persist_document(&self.path, &state)?;
         }
-        Ok(changed)
+        Ok(removed)
     }
 
     pub fn clear(&self) -> Result<(), HistoryError> {
@@ -202,166 +182,139 @@ impl HistoryService {
             return Ok(());
         }
         state.entries.clear();
-        write_history(&self.path, &state)
+        persist_document(&self.path, &state)
     }
 
     fn lock_state(&self) -> MutexGuard<'_, HistoryDocument> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
     }
 }
 
-fn unix_time_ms() -> Result<u64, HistoryError> {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| HistoryError::new(format!("system clock is before Unix epoch: {error}")))?
-        .as_millis();
-    u64::try_from(millis).map_err(|_| HistoryError::new("system timestamp is too large"))
+fn load_document(path: &Path) -> Result<HistoryDocument, HistoryError> {
+    if !path.exists() {
+        return Ok(HistoryDocument::default());
+    }
+    let bytes = fs::read(path)
+        .map_err(|error| HistoryError::new(format!("could not read history: {error}")))?;
+    if bytes.is_empty() {
+        return Ok(HistoryDocument::default());
+    }
+    serde_json::from_slice(&bytes)
+        .map_err(|error| HistoryError::new(format!("could not parse history: {error}")))
 }
 
-fn preserve_corrupt_history(path: &Path) -> Result<(), HistoryError> {
-    let stamp = unix_time_ms()?;
-    let backup = path.with_extension(format!("json.corrupt-{stamp}"));
-    fs::rename(path, &backup).map_err(|error| {
-        HistoryError::new(format!(
-            "could not preserve unreadable history {} as {}: {error}",
-            path.display(),
-            backup.display()
-        ))
-    })
-}
-
-fn write_history(path: &Path, document: &HistoryDocument) -> Result<(), HistoryError> {
-    let parent = path.parent().ok_or_else(|| {
-        HistoryError::new(format!("history path {} has no parent directory", path.display()))
-    })?;
-    fs::create_dir_all(parent).map_err(|error| {
-        HistoryError::new(format!(
-            "could not create history directory {}: {error}",
-            parent.display()
-        ))
-    })?;
-
-    let temporary = path.with_extension("json.tmp");
+fn persist_document(path: &Path, document: &HistoryDocument) -> Result<(), HistoryError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| HistoryError::new("history path has no parent directory"))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| HistoryError::new(format!("could not create history directory: {error}")))?;
     let bytes = serde_json::to_vec_pretty(document)
-        .map_err(|error| HistoryError::new(format!("could not encode history: {error}")))?;
+        .map_err(|error| HistoryError::new(format!("could not serialize history: {error}")))?;
+    let temp = path.with_extension("json.tmp");
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
-        .open(&temporary)
-        .map_err(|error| {
-            HistoryError::new(format!(
-                "could not open temporary history file {}: {error}",
-                temporary.display()
-            ))
-        })?;
-    file.write_all(&bytes).map_err(|error| {
-        HistoryError::new(format!(
-            "could not write temporary history file {}: {error}",
-            temporary.display()
-        ))
-    })?;
-    file.write_all(b"\n").map_err(|error| {
-        HistoryError::new(format!(
-            "could not finalize temporary history file {}: {error}",
-            temporary.display()
-        ))
-    })?;
-    file.sync_all().map_err(|error| {
-        HistoryError::new(format!(
-            "could not sync temporary history file {}: {error}",
-            temporary.display()
-        ))
-    })?;
+        .open(&temp)
+        .map_err(|error| HistoryError::new(format!("could not open history temp file: {error}")))?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| HistoryError::new(format!("could not write history: {error}")))?;
     drop(file);
+    replace_file(&temp, path)
+        .map_err(|error| HistoryError::new(format!("could not commit history: {error}")))
+}
 
+fn replace_file(temp: &Path, destination: &Path) -> io::Result<()> {
     #[cfg(target_os = "windows")]
-    if path.exists() {
-        fs::remove_file(path).map_err(|error| {
-            HistoryError::new(format!(
-                "could not replace existing history file {}: {error}",
-                path.display()
-            ))
-        })?;
+    if destination.exists() {
+        fs::remove_file(destination)?;
     }
+    fs::rename(temp, destination)
+}
 
-    fs::rename(&temporary, path).map_err(|error| {
-        let _ = fs::remove_file(&temporary);
-        HistoryError::new(format!(
-            "could not commit history file {}: {error}",
-            path.display()
-        ))
-    })
+fn unix_time_ms() -> Result<u64, HistoryError> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| HistoryError::new(format!("system clock predates Unix epoch: {error}")))?;
+    u64::try_from(duration.as_millis())
+        .map_err(|_| HistoryError::new("system timestamp does not fit in u64 milliseconds"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
-    fn temporary_directory(test_name: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock must be after Unix epoch")
-            .as_nanos();
+    fn temporary_path(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
-            "blcvoice-history-{test_name}-{}-{nonce}",
-            std::process::id()
+            "blcvoice-history-{label}-{}-{}.json",
+            std::process::id(),
+            unix_time_ms().expect("time must be available")
         ))
     }
 
-    fn entry(text: impl Into<String>) -> NewHistoryEntry {
+    fn entry(text: &str) -> NewHistoryEntry {
         NewHistoryEntry {
-            text: text.into(),
+            text: text.to_owned(),
             detected_language: Some("tr".to_owned()),
             engine_id: "transcribe.cpp".to_owned(),
             model_id: "test-model".to_owned(),
-            insertion_backend: "test".to_owned(),
+            insertion_backend: "test-backend".to_owned(),
             semantic_delivery_verified: false,
         }
     }
 
     #[test]
     fn history_round_trips_and_newest_entry_is_first() {
-        let directory = temporary_directory("round-trip");
-        let service = HistoryService::open(&directory).unwrap();
-        let first = service.append(entry("first")).unwrap();
-        let second = service.append(entry("second")).unwrap();
-        assert!(second.id() > first.id());
+        let path = temporary_path("round-trip");
+        let service = HistoryService::open_at(path.clone()).expect("history must open");
+        let first = service.append(entry("ilk")).expect("first entry");
+        std::thread::sleep(Duration::from_millis(2));
+        let second = service.append(entry("ikinci")).expect("second entry");
+        let entries = service.entries();
+        assert_eq!(entries, vec![second.clone(), first.clone()]);
         drop(service);
 
-        let reopened = HistoryService::open(&directory).unwrap();
-        let entries = reopened.entries();
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].text, "second");
-        assert_eq!(entries[1].text, "first");
-        let _ = fs::remove_dir_all(directory);
-    }
-
-    #[test]
-    fn history_is_bounded_to_the_latest_entries() {
-        let directory = temporary_directory("bounded");
-        let service = HistoryService::open(&directory).unwrap();
-        for index in 0..(MAX_HISTORY_ENTRIES + 5) {
-            service.append(entry(format!("entry {index}"))).unwrap();
-        }
-        let entries = service.entries();
-        assert_eq!(entries.len(), MAX_HISTORY_ENTRIES);
-        assert_eq!(entries[0].text, format!("entry {}", MAX_HISTORY_ENTRIES + 4));
-        let _ = fs::remove_dir_all(directory);
+        let reopened = HistoryService::open_at(path.clone()).expect("history must reopen");
+        assert_eq!(reopened.entries(), vec![second, first]);
+        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn delete_and_clear_are_persistent() {
-        let directory = temporary_directory("delete-clear");
-        let service = HistoryService::open(&directory).unwrap();
-        let item = service.append(entry("keep briefly")).unwrap();
-        assert!(service.delete(item.id()).unwrap());
-        service.append(entry("clear me")).unwrap();
-        service.clear().unwrap();
+        let path = temporary_path("delete-clear");
+        let service = HistoryService::open_at(path.clone()).expect("history must open");
+        let first = service.append(entry("bir")).expect("first entry");
+        let _second = service.append(entry("iki")).expect("second entry");
+        assert!(service.delete(first.id).expect("delete must succeed"));
+        assert_eq!(service.entries().len(), 1);
+        service.clear().expect("clear must persist");
+        assert!(service.entries().is_empty());
         drop(service);
-        assert!(HistoryService::open(&directory).unwrap().entries().is_empty());
-        let _ = fs::remove_dir_all(directory);
+
+        let reopened = HistoryService::open_at(path.clone()).expect("history must reopen");
+        assert!(reopened.entries().is_empty());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn history_is_bounded_to_the_latest_entries() {
+        let path = temporary_path("bounded");
+        let service = HistoryService::open_at(path.clone()).expect("history must open");
+        for index in 0..(MAX_HISTORY_ENTRIES + 5) {
+            service
+                .append(entry(&format!("entry-{index}")))
+                .expect("append must succeed");
+        }
+        let entries = service.entries();
+        assert_eq!(entries.len(), MAX_HISTORY_ENTRIES);
+        assert_eq!(entries[0].text, format!("entry-{}", MAX_HISTORY_ENTRIES + 4));
+        assert_eq!(entries.last().expect("last entry").text, "entry-5");
+        let _ = fs::remove_file(path);
     }
 }
