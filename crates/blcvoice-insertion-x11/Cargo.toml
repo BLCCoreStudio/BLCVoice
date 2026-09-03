@@ -1,0 +1,17 @@
+[package]
+name = "blcvoice-insertion-x11"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "X11 XTEST text insertion adapter for BLCVoice"
+
+[dependencies]
+blcvoice-insertion = { path = "../blcvoice-insertion" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.14.0", default-features = false, features = ["xtest"] }
+
+[lints]
+workspace = true
