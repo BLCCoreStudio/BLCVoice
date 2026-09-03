@@ -1,0 +1,37 @@
+name: Integrate recognizer cache
+
+on:
+  push:
+    branches:
+      - feat/recognizer-cache
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libpipewire-0.3-dev libpulse-dev
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt,clippy
+      - name: Integrate bounded recognizer cache
+        run: python3 scripts/_integrate_recognizer_cache.py
+      - name: Format and validate
+        run: |
+          cargo +1.98.0 fmt --all
+          cargo +1.98.0 test -p blcvoice-desktop --all-targets
+          cargo +1.98.0 clippy -p blcvoice-desktop --all-targets -- -D warnings
+      - name: Commit integration
+        run: |
+          git config user.name "BLC Core Studio — Developer Tools"
+          git config user.email "207100624+BLCCoreStudio@users.noreply.github.com"
+          git add apps/desktop/src-tauri/src/dictation.rs
+          git commit -m "perf: reuse loaded speech recognizer between dictations"
+          git push
