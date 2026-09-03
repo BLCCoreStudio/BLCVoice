@@ -58,7 +58,7 @@ impl std::error::Error for ShortcutCapabilityError {}
 pub const fn resolve_shortcut_backend(
     environment: ShortcutEnvironment,
 ) -> Result<ShortcutBackend, ShortcutCapabilityError> {
-    match (environment.platform, environment.linux_display_server) {
+    match (environment.platform(), environment.linux_display_server()) {
         (DesktopPlatform::Windows | DesktopPlatform::MacOs, _) => {
             Ok(ShortcutBackend::NativeGlobalHotkey)
         }
