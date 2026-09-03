@@ -17,8 +17,9 @@ use crate::capture::{
     session_state_name,
 };
 use crate::dictation::{
-    DesktopDictationError, DesktopDictationErrorKind, DesktopDictationReport,
-    DesktopDictationRequest, DesktopDictationService,
+    DesktopDictationError, DesktopDictationErrorKind, DesktopDictationFinish,
+    DesktopDictationReport, DesktopDictationRequest, DesktopDictationService,
+    DesktopNoSpeechReport,
 };
 use crate::insertion::DesktopInsertionService;
 use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};
@@ -134,10 +135,16 @@ impl DesktopState {
         &self,
         session_id: SessionId,
     ) -> Result<DictationReportDto, CommandErrorDto> {
-        let report = self
+        let report = match self
             .dictation
             .finish(session_id)
-            .map_err(CommandErrorDto::from)?;
+            .map_err(CommandErrorDto::from)?
+        {
+            DesktopDictationFinish::NoSpeech(report) => {
+                return Ok(DictationReportDto::no_speech(report));
+            }
+            DesktopDictationFinish::Transcribed(report) => report,
+        };
         let text = report.transcription.capture.transcription.text.clone();
         self.dictation
             .begin_insertion(session_id)
@@ -231,6 +238,7 @@ impl From<DesktopCaptureError> for CommandErrorDto {
             DesktopCaptureErrorKind::Busy => "capture_busy",
             DesktopCaptureErrorKind::InvalidDevice => "invalid_device",
             DesktopCaptureErrorKind::StaleSession => "stale_session",
+            DesktopCaptureErrorKind::SpeechDetection => "speech_detection_failed",
             DesktopCaptureErrorKind::PumpFailed => "capture_pump_failed",
             DesktopCaptureErrorKind::WorkerSpawn => "capture_worker_spawn_failed",
             DesktopCaptureErrorKind::WorkerJoin => "capture_worker_join_failed",
@@ -248,6 +256,7 @@ impl From<DesktopDictationError> for CommandErrorDto {
             DesktopDictationErrorKind::StaleSession => "stale_session",
             DesktopDictationErrorKind::RecognizerLoad => "recognizer_load_failed",
             DesktopDictationErrorKind::Capture => "dictation_capture_failed",
+            DesktopDictationErrorKind::SpeechDetection => "speech_detection_failed",
             DesktopDictationErrorKind::Transcription => "dictation_transcription_failed",
             DesktopDictationErrorKind::Insertion => "dictation_insertion_lifecycle_failed",
         };
@@ -458,7 +467,11 @@ pub struct DictationReportDto {
     source_frames: usize,
     asr_frames: usize,
     capture_stats: CaptureStatsDto,
-    insertion_backend: String,
+    speech_detected: bool,
+    vad_backend: String,
+    vad_max_speech_probability: Option<f32>,
+    speech_source_frames: usize,
+    insertion_backend: Option<String>,
     submitted_utf8_bytes: usize,
     semantic_delivery_verified: bool,
 }
@@ -468,8 +481,12 @@ impl DictationReportDto {
         &self.text
     }
 
-    pub(crate) fn insertion_backend(&self) -> &str {
-        &self.insertion_backend
+    pub(crate) fn insertion_backend(&self) -> Option<&str> {
+        self.insertion_backend.as_deref()
+    }
+
+    pub(crate) const fn speech_detected(&self) -> bool {
+        self.speech_detected
     }
 
     fn completed(
@@ -488,12 +505,39 @@ impl DictationReportDto {
             engine_id: report.engine_id,
             model_id: report.model_id,
             backend_name: report.backend_name,
-            source_frames: capture.source_frames,
+            source_frames: report.finalized.source_frames,
             asr_frames: capture.asr_frames,
             capture_stats: CaptureStatsDto::from(capture.capture_stats),
-            insertion_backend: receipt.backend().to_string(),
+            speech_detected: true,
+            vad_backend: report.vad_backend,
+            vad_max_speech_probability: report.detection.analysis.max_speech_probability,
+            speech_source_frames: report.detection.retained_source_frames,
+            insertion_backend: Some(receipt.backend().to_string()),
             submitted_utf8_bytes: receipt.submitted_utf8_bytes(),
             semantic_delivery_verified: receipt.semantic_delivery_verified(),
+        }
+    }
+
+    fn no_speech(report: DesktopNoSpeechReport) -> Self {
+        Self {
+            session_id: report.terminal_session.id.get(),
+            state: session_state_name(report.terminal_session.state),
+            text: String::new(),
+            raw_text: None,
+            detected_language: None,
+            engine_id: report.engine_id,
+            model_id: report.model_id,
+            backend_name: report.backend_name,
+            source_frames: report.finalized.source_frames,
+            asr_frames: 0,
+            capture_stats: CaptureStatsDto::from(report.finalized.capture_stats),
+            speech_detected: false,
+            vad_backend: report.vad_backend,
+            vad_max_speech_probability: report.detection.analysis.max_speech_probability,
+            speech_source_frames: 0,
+            insertion_backend: None,
+            submitted_utf8_bytes: 0,
+            semantic_delivery_verified: false,
         }
     }
 }

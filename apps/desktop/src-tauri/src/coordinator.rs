@@ -256,12 +256,24 @@ impl DictationLifecycleEventDto {
     }
 
     fn completed(session_id: SessionId, report: &DictationReportDto) -> Self {
+        if !report.speech_detected() {
+            return Self {
+                source: "shortcut",
+                state: "noSpeech",
+                session_id: Some(session_id.get()),
+                text: None,
+                insertion_backend: None,
+                error_code: None,
+                message: Some("No speech was detected; nothing was inserted.".to_owned()),
+                recoverable_text: None,
+            };
+        }
         Self {
             source: "shortcut",
             state: "completed",
             session_id: Some(session_id.get()),
             text: Some(report.text().to_owned()),
-            insertion_backend: Some(report.insertion_backend().to_owned()),
+            insertion_backend: report.insertion_backend().map(str::to_owned),
             error_code: None,
             message: None,
             recoverable_text: None,
