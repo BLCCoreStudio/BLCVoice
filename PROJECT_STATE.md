@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-04 against `main` at `ba54d262dca84a02f28b61c166ea19da8e4f6e0f` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `41a6fdcbb303296d550f0400b35fb4e1acaf6932` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -23,6 +23,7 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - engine-agnostic Silero VAD integrated into production dictation;
 - cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
 - a fail-closed aggregate critical CI validation gate from PR #47;
+- a deterministic engine-neutral preprocessing benchmark foundation from PR #48;
 - the canonical autonomous-development/source-of-truth operating layer;
 - reconciled maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation from PR #46.
 
@@ -33,13 +34,14 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 - **PR #41 — `build: add cross-platform desktop bundle pipeline`** merged as `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` after normal CI and the revised bundle matrix passed on the unchanged head SHA.
 - **PR #46 — `chore: refresh maintainer automation baseline`** merged as `00c59bdfe0a01c7dcce552130325938fa497e9ac`; it supersedes stale PR #17.
 - **PR #47 — `ci: add fail-closed critical validation gate`** merged as `ba54d262dca84a02f28b61c166ea19da8e4f6e0f` after the relevant checks passed on its unchanged head SHA.
+- **PR #48 — `perf: add reproducible preprocessing benchmark foundation`** merged as `41a6fdcbb303296d550f0400b35fb4e1acaf6932` after CI, Security Audit and Desktop bundles passed on unchanged head `27ca6538a43b3493ff7e07ee67b1b4f30ce18398`.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active work
 
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
-- **#43 benchmark foundation** — active. The first slice adds a deterministic engine-neutral audio-preprocessing benchmark with cold/warm timing, RTF and environment metadata plus an evidence contract in `docs/benchmarking.md`.
+- **#43 benchmark foundation** — active. The preprocessing slice is merged. The current slice adds an adapter-owned `transcribe.cpp` benchmark for model/session load, first inference, warm reused-session inference, RTF and environment/model/backend metadata without changing the engine-neutral ASR contract.
 
 ## Canonical backlog
 
@@ -55,7 +57,7 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 - The live protected-branch ruleset does not yet require `Critical validation gate`; the repository-side check exists and the exact administration action is documented in `docs/ci-required-checks.md`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
-- Reproducible model-load, ASR inference, end-to-end post-stop latency, resource-use and later accuracy evidence is not yet complete; issue #43 owns that foundation.
+- Post-stop-to-transcript latency, reliable resource-use and later accuracy evidence are not yet complete; issue #43 owns that foundation.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
@@ -64,10 +66,10 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 Exact next action:
 
-1. Validate the deterministic preprocessing benchmark on its exact PR head SHA with formatting, tests, Clippy and the cross-platform CI matrix.
+1. Validate the adapter-owned ASR benchmark on its exact PR head SHA with formatting, tests, Clippy and the cross-platform CI matrix.
 2. Keep CI timing results informational; do not establish performance thresholds from hosted-runner timing.
 3. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-4. Continue #43 with engine-adapter cold/warm model-load and inference measurements plus post-stop-to-transcript timing without leaking engine-specific policy into core contracts.
+4. Continue #43 with post-stop-to-transcript timing and reliable resource-use probes without leaking engine-specific policy into core contracts.
 5. Continue with #44 after the benchmark foundation is stable.
 6. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
 7. Do **not** configure production signing/notarization credentials or publish a production release.
