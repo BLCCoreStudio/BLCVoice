@@ -197,6 +197,19 @@ Failures should be typed and actionable rather than collapsed into generic strin
 
 Compatibility is evidence-based. A platform or environment is considered supported only after its critical dictation path is covered by repeatable testing. Environments may be marked experimental when automated or hardware-backed coverage is incomplete.
 
+### 7.1 Distribution and release trust boundary
+
+Native package production is a separate evidence layer from runtime compatibility and operating-system trust.
+
+- Linux release artifacts use an explicit compatibility-oriented build baseline rather than whichever Linux runner happens to be newest.
+- macOS packaging covers both arm64 and x64 as distinct build environments.
+- build-only pull-request/manual packaging jobs must not need release-write permission.
+- unsigned Windows artifacts and ad-hoc-signed macOS artifacts may be used for build validation and draft distribution, but they must not be described as production-signed or notarized.
+- production signing/notarization credentials and production publication remain outside autonomous repository execution.
+- updater metadata is not enabled until its trust/signing policy is explicitly decided.
+
+ADR 0026 defines the current desktop packaging matrix and release trust boundary.
+
 ## 8. What is deliberately outside the initial architecture
 
 The first implementation will not optimize for:

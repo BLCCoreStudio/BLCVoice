@@ -1,0 +1,239 @@
+name: Desktop bundles
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/bundle.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "apps/desktop/**"
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-bundles-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-linux:
+    if: github.event_name != 'push'
+    name: Bundle validation (Linux x64 / Debian 12)
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      - name: Install Debian build prerequisites
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            wget \
+            file \
+            git \
+            build-essential \
+            pkg-config \
+            nodejs \
+            npm \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libpulse-dev \
+            libclang-dev \
+            patchelf \
+            cmake
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build and upload Debian validation bundle
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
+        with:
+          projectPath: apps/desktop/src-tauri
+          args: "--bundles deb"
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
+          uploadUpdaterJson: false
+
+  validate-native:
+    if: github.event_name != 'push'
+    name: Bundle validation (${{ matrix.name }})
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-2025
+            args: "--bundles nsis"
+          - name: macOS arm64
+            platform: macos-15
+            args: "--bundles app,dmg"
+          - name: macOS x64
+            platform: macos-15-intel
+            args: "--bundles app,dmg"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure macOS bundle environment
+        if: runner.os == 'macOS'
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> "$GITHUB_ENV"
+          echo "CMAKE_ARGS=-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15" >> "$GITHUB_ENV"
+          echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Build and upload validation bundles
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
+        with:
+          projectPath: apps/desktop/src-tauri
+          args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
+          uploadUpdaterJson: false
+
+  release-linux-draft:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    name: Draft bundle (Linux x64 / Debian 12)
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      - name: Install Debian build prerequisites
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            wget \
+            file \
+            git \
+            build-essential \
+            pkg-config \
+            nodejs \
+            npm \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libpulse-dev \
+            libclang-dev \
+            patchelf \
+            cmake
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build bundle and create draft prerelease
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop/src-tauri
+          args: "--bundles deb"
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
+          tagName: ${{ github.ref_name }}
+          releaseName: "BLCVoice v__VERSION__"
+          releaseBody: "Cross-platform BLCVoice desktop bundles. Linux currently ships a Debian package only; AppImage remains deferred pending verified Wayland-safe upstream bundling and runtime validation. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
+          releaseDraft: true
+          prerelease: true
+          generateReleaseNotes: true
+          uploadUpdaterJson: false
+
+  release-native-draft:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    name: Draft bundle (${{ matrix.name }})
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-2025
+            args: "--bundles nsis"
+          - name: macOS arm64
+            platform: macos-15
+            args: "--bundles app,dmg"
+          - name: macOS x64
+            platform: macos-15-intel
+            args: "--bundles app,dmg"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure macOS bundle environment
+        if: runner.os == 'macOS'
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> "$GITHUB_ENV"
+          echo "CMAKE_ARGS=-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15" >> "$GITHUB_ENV"
+          echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Build bundles and create draft prerelease
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop/src-tauri
+          args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
+          tagName: ${{ github.ref_name }}
+          releaseName: "BLCVoice v__VERSION__"
+          releaseBody: "Cross-platform BLCVoice desktop bundles. Linux currently ships a Debian package only; AppImage remains deferred pending verified Wayland-safe upstream bundling and runtime validation. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
+          releaseDraft: true
+          prerelease: true
+          generateReleaseNotes: true
+          uploadUpdaterJson: false

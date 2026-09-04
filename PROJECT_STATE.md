@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-03 against `main` at `a2470984fd7aae84eccb80729fa419c38dcaae82` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `64f9bcc6e4b634aa72ab7c21adf64747f2bd8155` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -20,17 +20,21 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - capability-driven Windows/macOS, Linux/X11 and Linux/Wayland text-insertion adapters;
 - production shortcut-to-dictation wiring;
 - lightweight dictation overlay and tray-resident behavior;
-- engine-agnostic Silero VAD integrated into production dictation.
+- engine-agnostic Silero VAD integrated into production dictation;
+- the canonical autonomous-development/source-of-truth operating layer.
 
 Compatibility claims remain evidence-based. Compile/lint/unit coverage is not equivalent to real desktop-session validation.
 
 ## Active pull requests
 
 1. **PR #41 — `build: add cross-platform desktop bundle pipeline`**
-   - Adds Linux, Windows and macOS bundle generation plus draft prerelease mechanics.
-   - Signing/notarization stays outside the repository trust boundary.
-   - Current head: `170280cb2d8dabc6503eb135020fbfc74b42be0d`.
-   - Current PR CI run `33790324156` concluded `action_required`; this must be resolved before the PR can count as complete.
+   - Current priority.
+   - Normal CI is green at head `1430cc7a8ea91b2c5c53cf18725938fb9a6a116a`.
+   - Bundle run `33845994202` produced Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, macOS x64 `.app`/`.dmg`, and the Linux Debian 12 `.deb` artifact on that same head.
+   - The Debian 12 production build requires `libclang-dev` because the PipeWire/SPA Rust bindings generate FFI bindings with bindgen.
+   - AppImage alone still failed in the linuxdeploy stage. Current Tauri upstream evidence also shows a material Wayland trust concern: the 2.11-era AppImage GTK hook forced `GDK_BACKEND=x11`; upstream #15786 now preserves an explicit backend, but BLCVoice has not verified the released bundler path or runtime-validated the artifact on KDE Wayland.
+   - Packaging policy is therefore narrowed to the proven matrix: Linux x64 `.deb` in Debian 12, Windows x64 NSIS on Windows Server 2025, macOS arm64/x64 `.app`/`.dmg` on explicit macOS 15 runners. AppImage is deferred behind explicit build + real-Wayland re-entry criteria in ADR 0026.
+   - macOS validation/draft artifacts use ad-hoc signing only. Production signing/notarization remains outside the autonomous trust boundary.
 
 2. **PR #17 — `chore: establish maintainer automation baseline`**
    - Adds CODEOWNERS/support/conduct/security-audit/release-note maintenance infrastructure.
@@ -51,7 +55,7 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 - The protected-branch required-check list does not yet cover every critical CI job; issue #42 owns the reconciliation.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Reproducible model/runtime latency, real-time factor, resource-use and later accuracy evidence is not yet a canonical benchmark system; issue #43 owns that foundation.
-- `README.md` previously duplicated fast-moving implementation status and had drifted behind `main`; it should now point here for current state instead of becoming a second state tracker.
+- AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
@@ -59,14 +63,14 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 Exact next action:
 
-1. Diagnose why PR #41 CI run `33790324156` is `action_required`.
-2. Restore a normal runnable CI path and make every applicable critical check pass.
-3. Validate the bundle pipeline produces the intended Linux `.deb`/`.AppImage`, Windows NSIS and macOS `.app`/`.dmg` artifacts without claiming signing/notarization.
-4. Review packaging failure modes and trust-boundary wording.
-5. Merge only when repository/review/critical-CI gates pass.
-6. Do **not** configure production signing/notarization credentials or publish a production release; those are mandatory stop gates.
+1. Require Linux x64 `.deb`, Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, and macOS x64 `.app`/`.dmg` artifacts from the same current PR head.
+2. Require every applicable critical normal-CI job to pass on the current PR head.
+3. Confirm AppImage is absent from both validation and tag-triggered draft-release paths and that ADR 0026/release documentation states its evidence-based re-entry criteria.
+4. Confirm release-write permission remains confined to tag-triggered draft-release jobs.
+5. Inspect review threads and merge PR #41 only when normal CI and the revised bundle-validation matrix are green on the unchanged head SHA.
+6. Do **not** configure production signing/notarization credentials or publish a production release.
 
-After #41 is safely completed, reconcile and finish PR #17 if it is still applicable. Then select from issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
+After #41 is safely merged, reconcile `PROJECT_STATE.md` to remove it from active work and make PR #17 the next safe task if it is still applicable. Then continue through issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
 
 ## Mandatory external gates
 
