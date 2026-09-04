@@ -368,7 +368,10 @@ mod tests {
 
     impl FakeAsr {
         fn transcribe(&self, samples: &[f32]) -> String {
-            assert!(!samples.is_empty(), "ASR must only run after speech detection");
+            assert!(
+                !samples.is_empty(),
+                "ASR must only run after speech detection"
+            );
             self.text.clone()
         }
     }
@@ -503,10 +506,8 @@ mod tests {
 
     #[test]
     fn shortcut_application_insertion_failure_preserves_recoverable_transcript() {
-        let mut harness = ApplicationHarness::new(
-            FakeVadOutcome::Speech,
-            Err("insertion_backend_failed"),
-        );
+        let mut harness =
+            ApplicationHarness::new(FakeVadOutcome::Speech, Err("insertion_backend_failed"));
         harness.apply(ShortcutDecision::StartDictation);
         harness.apply(ShortcutDecision::StopDictation);
 
