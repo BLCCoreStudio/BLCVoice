@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 const SCHEMA_VERSION: i64 = 1;
 const MAX_LIST_LIMIT: u32 = 500;
@@ -436,9 +436,7 @@ mod tests {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("history.sqlite3");
         let store = HistoryStore::open(&path).expect("open");
-        let entry = store
-            .append(&sample(10, "merhaba dünya"))
-            .expect("append");
+        let entry = store.append(&sample(10, "merhaba dünya")).expect("append");
         drop(store);
 
         let reopened = HistoryStore::open(&path).expect("reopen");
