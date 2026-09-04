@@ -196,3 +196,60 @@ jobs:
         run: cargo +1.98.0 test --locked -p blcvoice-desktop --all-targets
       - name: Lint desktop shell
         run: cargo +1.98.0 clippy --locked -p blcvoice-desktop --all-targets -- -D warnings
+
+  critical-validation:
+    name: Critical validation gate
+    if: ${{ always() }}
+    needs:
+      - lockfile
+      - core
+      - quality
+      - x11-insertion
+      - audio
+      - asr
+      - desktop-linux
+      - desktop-native
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every critical validation job to succeed
+        env:
+          LOCKFILE_RESULT: ${{ needs.lockfile.result }}
+          CORE_RESULT: ${{ needs.core.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          X11_INSERTION_RESULT: ${{ needs.x11-insertion.result }}
+          AUDIO_RESULT: ${{ needs.audio.result }}
+          ASR_RESULT: ${{ needs.asr.result }}
+          DESKTOP_LINUX_RESULT: ${{ needs.desktop-linux.result }}
+          DESKTOP_NATIVE_RESULT: ${{ needs.desktop-native.result }}
+        shell: bash
+        run: |
+          failed=0
+          for result in \
+            "$LOCKFILE_RESULT" \
+            "$CORE_RESULT" \
+            "$QUALITY_RESULT" \
+            "$X11_INSERTION_RESULT" \
+            "$AUDIO_RESULT" \
+            "$ASR_RESULT" \
+            "$DESKTOP_LINUX_RESULT" \
+            "$DESKTOP_NATIVE_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          done
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "At least one critical validation dependency did not succeed." >&2
+            printf 'lockfile=%s\ncore=%s\nquality=%s\nx11-insertion=%s\naudio=%s\nasr=%s\ndesktop-linux=%s\ndesktop-native=%s\n' \
+              "$LOCKFILE_RESULT" \
+              "$CORE_RESULT" \
+              "$QUALITY_RESULT" \
+              "$X11_INSERTION_RESULT" \
+              "$AUDIO_RESULT" \
+              "$ASR_RESULT" \
+              "$DESKTOP_LINUX_RESULT" \
+              "$DESKTOP_NATIVE_RESULT" >&2
+            exit 1
+          fi
+
+          echo "All critical validation dependencies succeeded."

@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-04 against `main` at `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `00c59bdfe0a01c7dcce552130325938fa497e9ac` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -22,27 +22,21 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - lightweight dictation overlay and tray-resident behavior;
 - engine-agnostic Silero VAD integrated into production dictation;
 - cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
-- the canonical autonomous-development/source-of-truth operating layer.
+- the canonical autonomous-development/source-of-truth operating layer;
+- reconciled maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation from PR #46.
 
 Compatibility claims remain evidence-based. Compile/lint/unit/package coverage is not equivalent to real desktop-session validation.
 
 ## Recently completed
 
 - **PR #41 — `build: add cross-platform desktop bundle pipeline`** merged as `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` after normal CI and the revised bundle matrix passed on the unchanged head SHA.
+- **PR #46 — `chore: refresh maintainer automation baseline`** merged as `00c59bdfe0a01c7dcce552130325938fa497e9ac`; it supersedes stale PR #17.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active pull requests
 
-1. **PR #46 — `chore: refresh maintainer automation baseline`**
-   - Current priority.
-   - Rebuilds the useful scope of stale PR #17 from current `main` rather than merging its old base forward.
-   - Adds CODEOWNERS, support/conduct policy, generated release-note categories, patch-only Dependabot auto-merge, and a scheduled RustSec audit.
-   - Must pass current CI on its exact head before merge.
-
-2. **PR #17 — `chore: establish maintainer automation baseline`**
-   - Superseded by PR #46 once #46 contains the reconciled source-of-truth update and validates cleanly.
-   - Do not merge #17 independently.
+- **`ci/critical-validation-gate`** — implements issue #42 repository-side work by adding a fail-closed aggregate CI gate and documenting the exact ruleset target. The GitHub ruleset itself still requires an administration-capable settings update after the new check has run successfully.
 
 ## Canonical backlog
 
@@ -56,23 +50,24 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 ## Known validation and governance gaps
 
-- The protected-branch required-check list does not yet cover every critical CI job; issue #42 owns the reconciliation.
+- The protected-branch required-check list does not yet cover every critical CI job. The repository-side fix is in `ci/critical-validation-gate`; issue #42 remains open until the live ruleset requires `Critical validation gate`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Reproducible model/runtime latency, real-time factor, resource-use and later accuracy evidence is not yet a canonical benchmark system; issue #43 owns that foundation.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
-**Finish PR #46 before starting another product feature.**
+**Finish issue #42 before benchmark or compatibility-matrix expansion.**
 
 Exact next action:
 
-1. Validate the new maintainer automation files against current `main` and current GitHub guidance.
-2. Require every applicable critical CI job to pass on the unchanged PR #46 head SHA.
-3. Inspect review threads and merge PR #46 only when its relevant checks are green.
-4. Close superseded PR #17 after #46 is safely merged.
-5. Then continue with issue #42 because merge-protection correctness is the highest remaining governance risk before benchmark and compatibility-matrix work.
-6. Do **not** configure production signing/notarization credentials or publish a production release.
+1. Validate the `Critical validation gate` workflow on its exact PR head SHA.
+2. Require every existing applicable critical CI job plus the aggregate gate to pass before merging the repository-side change.
+3. Inspect review threads and merge only with an unchanged head SHA.
+4. Add `Critical validation gate` to the active `main-protection` ruleset without removing existing checks. If repository administration is unavailable to the agent, stop at that external control boundary with the exact setting documented in `docs/ci-required-checks.md`.
+5. Validate the live ruleset after the setting changes; then close #42.
+6. Continue with #43 and #44 in source-of-truth order.
+7. Do **not** configure production signing/notarization credentials or publish a production release.
 
 ## Mandatory external gates
 
