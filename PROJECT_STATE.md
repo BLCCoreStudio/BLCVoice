@@ -43,7 +43,8 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 ## Active work
 
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
-- **#43 benchmark foundation / PR #52** — active. The branch now combines the final benchmark-evidence slices: platform-qualified process-memory counters with native semantics plus an engine-neutral corpus WER scorer that requires explicit aligned reference/hypothesis transcripts. Synthetic generated inference input remains excluded from accuracy evidence.
+- **#43 benchmark foundation / PR #52** — active. The branch combines the final benchmark-evidence slices: platform-qualified process-memory counters with native semantics plus an engine-neutral corpus WER scorer requiring explicit aligned reference/hypothesis transcripts. Synthetic generated inference input remains excluded from accuracy evidence. CI and Security Audit are green on exact head `bcfffc3edc1064afe442b81b8786cf1b77df6c8d`; desktop bundle validation is still completing before merge.
+- **#44 real-platform validation preparation** — stacked work has started from the exact #52 head so it cannot bypass #43. `docs/platform-validation.md` is the new canonical runtime-evidence matrix and replaces the narrower Wayland-only truth source. `docs/platform-validation-evidence-template.md` defines per-environment evidence records and explicitly separates backend/protocol acceptance from semantic target-document verification.
 
 ## Canonical backlog
 
@@ -59,22 +60,24 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 - The live protected-branch ruleset does not yet require `Critical validation gate`; the repository-side check exists and the exact administration action is documented in `docs/ci-required-checks.md`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
-- PR #52 must still prove the final #43 memory + accuracy-evidence tooling on one unchanged head SHA before #43 can close.
+- PR #52 must still complete the final desktop bundle validation on its unchanged head before #43 can merge and close.
+- The #44 repository-side matrix is being prepared, but real desktop-session rows remain `UNVALIDATED` or `PARTIAL` until executed on representative sessions.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
-**Finish #43 on PR #52, then continue directly with #44 while keeping #42's live-ruleset administration gap explicit.**
+**Finish #43 on PR #52, then promote the stacked #44 validation work onto `main`.**
 
 Exact next action:
 
-1. Validate the platform-qualified process-memory evidence and accuracy scorer with formatting, tests, Clippy, Security Audit and the cross-platform CI/bundle matrix on one exact PR head SHA.
-2. Keep hosted-runner timing and memory results informational; do not establish release thresholds from CI runners.
-3. Accuracy evidence must retain the explicit reference/hypothesis corpus plus engine/model/runtime/environment metadata; generated synthetic inference input is never an accuracy corpus.
-4. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-5. If the #43 acceptance criteria remain satisfied after merge, close #43 and continue immediately with #44 real-platform compatibility evidence.
-6. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
-7. Do **not** configure production signing/notarization credentials or publish a production release.
+1. Merge PR #52 only after CI, Security Audit and every relevant desktop bundle job are green on unchanged head `bcfffc3edc1064afe442b81b8786cf1b77df6c8d` and review threads remain clear.
+2. Close #43 if its acceptance criteria still hold after merge.
+3. Rebase/retarget the stacked #44 validation branch onto the merged `main` history without dropping #52 evidence.
+4. Validate the canonical matrix/evidence-template changes, then merge them before collecting runtime evidence.
+5. Execute every environment row available through current tooling; record unavailable physical/session validation as `BLOCKED_EXTERNAL`, never as passing.
+6. Update support claims only after the relevant row is `VALIDATED` on an exact commit.
+7. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
+8. Do **not** configure production signing/notarization credentials or publish a production release.
 
 ## Mandatory external gates
 
