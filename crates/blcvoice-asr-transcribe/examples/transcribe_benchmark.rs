@@ -78,7 +78,10 @@ fn main() {
     println!("threads={}", config.n_threads);
     println!("os={}", env::consts::OS);
     println!("arch={}", env::consts::ARCH);
-    println!("logical_cpus={}", std::thread::available_parallelism().map_or(0, usize::from));
+    println!(
+        "logical_cpus={}",
+        std::thread::available_parallelism().map_or(0, usize::from)
+    );
     println!("input_source=deterministic-generated");
     println!("input_sample_rate_hz={SAMPLE_RATE_HZ}");
     println!("input_channels={CHANNELS}");
@@ -87,10 +90,16 @@ fn main() {
     println!("warm_runs={}", config.warm_runs);
     println!("model_load_ms={:.3}", millis(load_elapsed));
     println!("cold_inference_ms={:.3}", millis(cold_elapsed));
-    println!("cold_inference_rtf={:.6}", rtf(cold_elapsed, audio_duration));
+    println!(
+        "cold_inference_rtf={:.6}",
+        rtf(cold_elapsed, audio_duration)
+    );
     println!("warm_inference_total_ms={:.3}", millis(warm_total));
     println!("warm_inference_mean_ms={:.3}", millis(warm_mean));
-    println!("warm_inference_mean_rtf={:.6}", rtf(warm_mean, audio_duration));
+    println!(
+        "warm_inference_mean_rtf={:.6}",
+        rtf(warm_mean, audio_duration)
+    );
     println!("cold_transcript_bytes={}", cold.text.len());
     println!("warm_transcript_bytes={warm_text_bytes}");
 }
@@ -106,10 +115,14 @@ fn parse_args() -> Result<Config, String> {
         match argument.as_str() {
             "--model" => model = Some(PathBuf::from(next_value(&mut args, "--model")?)),
             "--duration-seconds" => {
-                duration_seconds = parse_positive(&next_value(&mut args, "--duration-seconds")?, "duration")?;
+                duration_seconds = parse_positive(
+                    &next_value(&mut args, "--duration-seconds")?,
+                    "duration",
+                )?;
             }
             "--warm-runs" => {
-                warm_runs = parse_positive(&next_value(&mut args, "--warm-runs")?, "warm runs")?;
+                warm_runs =
+                    parse_positive(&next_value(&mut args, "--warm-runs")?, "warm runs")?;
             }
             "--threads" => {
                 n_threads = next_value(&mut args, "--threads")?
@@ -132,7 +145,8 @@ fn parse_args() -> Result<Config, String> {
 }
 
 fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
-    args.next().ok_or_else(|| format!("{flag} requires a value"))
+    args.next()
+        .ok_or_else(|| format!("{flag} requires a value"))
 }
 
 fn parse_positive(value: &str, name: &str) -> Result<u32, String> {
