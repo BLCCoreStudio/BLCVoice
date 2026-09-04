@@ -21,6 +21,12 @@ impl EditCounts {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Cell {
+    distance: usize,
+    counts: EditCounts,
+}
+
 #[derive(Debug)]
 struct Args {
     reference: PathBuf,
@@ -61,9 +67,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let errors = totals.errors();
     let wer = if reference_words == 0 {
-        if hypothesis_words == 0 { 0.0 } else { f64::INFINITY }
+        if hypothesis_words == 0 {
+            Some(0.0)
+        } else {
+            None
+        }
     } else {
-        errors as f64 / reference_words as f64
+        Some(errors as f64 / reference_words as f64)
     };
 
     println!("format={FORMAT_VERSION}");
@@ -77,10 +87,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("deletions={}", totals.deletions);
     println!("insertions={}", totals.insertions);
     println!("word_errors={errors}");
-    if wer.is_finite() {
-        println!("wer={wer:.8}");
-    } else {
-        println!("wer=undefined_nonempty_hypothesis_with_empty_reference");
+    match wer {
+        Some(value) => println!("wer={value:.8}"),
+        None => println!("wer=undefined_nonempty_hypothesis_with_empty_reference"),
     }
 
     Ok(())
@@ -110,12 +119,6 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
 }
 
 fn align_words(reference: &[&str], hypothesis: &[&str]) -> EditCounts {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct Cell {
-        distance: usize,
-        counts: EditCounts,
-    }
-
     let mut previous = Vec::with_capacity(hypothesis.len() + 1);
     previous.push(Cell {
         distance: 0,
@@ -147,9 +150,9 @@ fn align_words(reference: &[&str], hypothesis: &[&str]) -> EditCounts {
                 continue;
             }
 
-            let substitution = with_substitution(previous[hypothesis_index]);
-            let deletion = with_deletion(previous[hypothesis_index + 1]);
-            let insertion = with_insertion(current[hypothesis_index]);
+            let substitution = increment_substitution(previous[hypothesis_index]);
+            let deletion = increment_deletion(previous[hypothesis_index + 1]);
+            let insertion = increment_insertion(current[hypothesis_index]);
             current.push(best_cell(substitution, deletion, insertion));
         }
 
@@ -159,43 +162,35 @@ fn align_words(reference: &[&str], hypothesis: &[&str]) -> EditCounts {
     previous[hypothesis.len()].counts
 }
 
-fn with_substitution(mut cell: CellLike) -> CellLike {
+fn increment_substitution(mut cell: Cell) -> Cell {
     cell.distance += 1;
     cell.counts.substitutions += 1;
     cell
 }
 
-fn with_deletion(mut cell: CellLike) -> CellLike {
+fn increment_deletion(mut cell: Cell) -> Cell {
     cell.distance += 1;
     cell.counts.deletions += 1;
     cell
 }
 
-fn with_insertion(mut cell: CellLike) -> CellLike {
+fn increment_insertion(mut cell: Cell) -> Cell {
     cell.distance += 1;
     cell.counts.insertions += 1;
     cell
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CellLike {
-    distance: usize,
-    counts: EditCounts,
-}
-
-impl From<CellLike> for CellLike {
-    fn from(value: CellLike) -> Self {
-        value
-    }
-}
-
-fn best_cell(substitution: impl Into<CellLike>, deletion: impl Into<CellLike>, insertion: impl Into<CellLike>) -> CellLike {
-    let substitution = substitution.into();
-    let deletion = deletion.into();
-    let insertion = insertion.into();
+fn best_cell(substitution: Cell, deletion: Cell, insertion: Cell) -> Cell {
     [substitution, deletion, insertion]
         .into_iter()
-        .min_by_key(|cell| (cell.distance, cell.counts.substitutions, cell.counts.deletions, cell.counts.insertions))
+        .min_by_key(|cell| {
+            (
+                cell.distance,
+                cell.counts.substitutions,
+                cell.counts.deletions,
+                cell.counts.insertions,
+            )
+        })
         .expect("three candidates")
 }
 
@@ -238,7 +233,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_reference_is_not_reported_as_zero_when_hypothesis_has_words() {
+    fn empty_reference_counts_hypothesis_as_insertions() {
         let counts = align_words(&[], &["unexpected"]);
         assert_eq!(counts.insertions, 1);
     }
