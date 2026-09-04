@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-04 against `main` at `21fd32218fc40a41dc5e50cbee85dd2e6f32892c` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `7fc1d50714b81c913cd229fbfd0a8005fa6925e9` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -10,7 +10,7 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 
 ## Current implementation state
 
-`main` currently contains the Rust/Tauri desktop foundation and the production dictation path with:
+`main` currently contains the Rust/Tauri desktop foundation and production dictation path with:
 
 - bounded session/runtime orchestration;
 - native microphone discovery/capture and preprocessing;
@@ -22,27 +22,26 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - lightweight dictation overlay and tray-resident behavior;
 - engine-agnostic Silero VAD integrated into production dictation;
 - cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
-- a fail-closed aggregate critical CI validation gate from PR #47;
-- deterministic preprocessing and `transcribe.cpp` cold/warm ASR benchmark probes from PRs #48 and #49;
+- a fail-closed aggregate critical CI validation gate;
+- deterministic preprocessing, `transcribe.cpp` cold/warm ASR and engine-neutral post-stop benchmark probes;
 - the canonical autonomous-development/source-of-truth operating layer;
-- reconciled maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation from PR #46.
+- maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation.
 
 Compatibility claims remain evidence-based. Compile/lint/unit/package coverage is not equivalent to real desktop-session validation.
 
 ## Recently completed
 
-- **PR #41 — `build: add cross-platform desktop bundle pipeline`** merged as `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` after normal CI and the revised bundle matrix passed on the unchanged head SHA.
-- **PR #46 — `chore: refresh maintainer automation baseline`** merged as `00c59bdfe0a01c7dcce552130325938fa497e9ac`; it supersedes stale PR #17.
-- **PR #47 — `ci: add fail-closed critical validation gate`** merged as `ba54d262dca84a02f28b61c166ea19da8e4f6e0f` after the relevant checks passed on its unchanged head SHA.
-- **PR #48 — `perf: add reproducible preprocessing benchmark foundation`** merged as `41a6fdcbb303296d550f0400b35fb4e1acaf6932` after CI, Security Audit and Desktop bundles passed on unchanged head `27ca6538a43b3493ff7e07ee67b1b4f30ce18398`.
-- **PR #49 — `perf: add transcribe ASR cold/warm benchmark`** merged as `21fd32218fc40a41dc5e50cbee85dd2e6f32892c` after CI, Security Audit and Desktop bundles passed on unchanged head `d2330b9e7ed2c603a5bbadf94c666ca3fb19187d`.
+- **PR #47 — `ci: add fail-closed critical validation gate`** merged as `ba54d262dca84a02f28b61c166ea19da8e4f6e0f`.
+- **PR #48 — `perf: add reproducible preprocessing benchmark foundation`** merged as `41a6fdcbb303296d550f0400b35fb4e1acaf6932` after CI, Security Audit and Desktop bundles passed on unchanged head.
+- **PR #49 — `perf: add transcribe ASR cold/warm benchmark`** merged as `21fd32218fc40a41dc5e50cbee85dd2e6f32892c` after CI, Security Audit and Desktop bundles passed on unchanged head.
+- **PR #50 — `perf: add deterministic post-stop dictation benchmark`** merged as `7fc1d50714b81c913cd229fbfd0a8005fa6925e9` after CI, Security Audit and Desktop bundles passed on unchanged head `71e8ab9fae52750b88e03dc9f13fcc6fb0eb0162`.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active work
 
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
-- **#43 benchmark foundation** — active. Preprocessing plus adapter-owned model/session load and cold/warm ASR inference probes are merged. The current slice adds a deterministic engine-neutral post-stop core dictation probe over the real finalization/preprocessing/`SpeechRecognizer` contract seam without claiming real-model or desktop-session E2E latency.
+- **#43 benchmark foundation** — active. Timing probes are merged. The current slice adds platform-qualified peak-memory evidence wrappers plus an engine-neutral WER/CER scorer. Native resource semantics remain distinct by OS, deterministic CI validates tooling only, and no hosted-runner resource number or scorer self-test is a product performance/accuracy claim.
 
 ## Canonical backlog
 
@@ -58,22 +57,22 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 - The live protected-branch ruleset does not yet require `Critical validation gate`; the repository-side check exists and the exact administration action is documented in `docs/ci-required-checks.md`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
-- Reliable resource-use and later accuracy evidence remain incomplete; issue #43 owns that foundation. The deterministic post-stop benchmark does not claim microphone/runtime scheduling or real-model desktop E2E latency.
+- A real-model accuracy result still requires a provenance-qualified model and licensed reference corpus; deterministic scorer validation alone must not be reported as product accuracy.
+- Real-model resource evidence is environment-specific; hosted-runner smoke values must not become release baselines.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
-**Continue issue #43 while keeping #42's live-ruleset administration gap explicit.**
+**Finish issue #43, then continue directly with #44 while keeping #42's live-ruleset administration gap explicit.**
 
 Exact next action:
 
-1. Validate the deterministic post-stop dictation benchmark on its exact PR head SHA with formatting, tests, Clippy and the cross-platform CI matrix.
-2. Keep CI timing results informational; do not establish performance thresholds from hosted-runner timing.
-3. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-4. Continue #43 with reliable platform-qualified resource-use probes and close the issue only when its acceptance criteria are met without overstating cross-platform memory semantics.
-5. Continue with #44 after the benchmark foundation is stable.
-6. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
-7. Do **not** configure production signing/notarization credentials or publish a production release.
+1. Validate the platform-qualified resource wrappers and accuracy scorer with deterministic cross-platform CI on the unchanged PR head.
+2. Merge only when formatting/tests/Clippy, Security Audit, Desktop bundles and all critical CI checks are green, review threads are clear and the head SHA is unchanged.
+3. Close #43 when its benchmark-foundation acceptance criteria are met; do not invent a real-model accuracy baseline if no provenance-qualified model/corpus evidence was executed.
+4. Continue immediately with #44 and consolidate the real-platform validation matrix into `docs/wayland-eis-validation.md` plus the other required platform rows.
+5. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
+6. Do **not** configure production signing/notarization credentials or publish a production release.
 
 ## Mandatory external gates
 
