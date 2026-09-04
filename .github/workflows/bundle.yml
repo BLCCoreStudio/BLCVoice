@@ -30,6 +30,10 @@ jobs:
     runs-on: ubuntu-24.04
     container: debian:12
     timeout-minutes: 60
+    env:
+      # AppImage build tools are AppImages themselves; containers do not expose
+      # FUSE, so use their supported extract-and-run path instead.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - name: Install Debian build prerequisites
         shell: bash
@@ -129,6 +133,10 @@ jobs:
     runs-on: ubuntu-24.04
     container: debian:12
     timeout-minutes: 60
+    env:
+      # Keep release packaging aligned with validation: avoid requiring FUSE
+      # inside the Debian container when linuxdeploy/appimagetool execute.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - name: Install Debian build prerequisites
         shell: bash
