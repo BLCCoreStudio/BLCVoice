@@ -46,6 +46,26 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal
       - name: Test platform-independent core
         run: cargo +1.98.0 test --locked -p blcvoice-core -p blcvoice-audio-processing -p blcvoice-asr -p blcvoice-vad -p blcvoice-vad-silero -p blcvoice-dictation -p blcvoice-runtime -p blcvoice-platform -p blcvoice-shortcuts -p blcvoice-insertion -p blcvoice-insertion-eis -p blcvoice-insertion-x11 -p blcvoice-insertion-native --all-targets
+      - name: Validate accuracy scorer
+        if: runner.os != 'Windows'
+        run: python3 scripts/score-accuracy.py --self-test
+      - name: Validate accuracy scorer (Windows)
+        if: runner.os == 'Windows'
+        run: python scripts/score-accuracy.py --self-test
+      - name: Smoke-test native resource wrapper
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash scripts/measure-resource.sh -- sh -c 'exit 0' > resource-smoke.txt 2>/dev/null
+          grep -Fx 'resource_format=blcvoice-resource-evidence-v1' resource-smoke.txt
+          grep -Fx 'resource_command_exit_code=0' resource-smoke.txt
+      - name: Smoke-test native resource wrapper (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ./scripts/measure-resource.ps1 -FilePath $env:ComSpec -ArgumentList @('/d', '/c', 'exit 0') | Tee-Object resource-smoke.txt
+          if (-not (Select-String -Path resource-smoke.txt -SimpleMatch 'resource_format=blcvoice-resource-evidence-v1')) { exit 1 }
+          if (-not (Select-String -Path resource-smoke.txt -SimpleMatch 'resource_command_exit_code=0')) { exit 1 }
 
   quality:
     name: Rust quality
