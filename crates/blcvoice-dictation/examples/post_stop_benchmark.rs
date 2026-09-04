@@ -137,9 +137,7 @@ impl SpeechRecognizer for DeterministicRecognizer {
 fn main() {
     let config = parse_args().unwrap_or_else(|message| {
         eprintln!("{message}");
-        eprintln!(
-            "usage: post_stop_benchmark [--duration-seconds N] [--runs N]"
-        );
+        eprintln!("usage: post_stop_benchmark [--duration-seconds N] [--runs N]");
         process::exit(2);
     });
 
