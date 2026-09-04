@@ -32,6 +32,15 @@ struct DeterministicCapture {
     stats: CaptureStats,
 }
 
+#[derive(Debug)]
+struct MemoryEvidence {
+    source: &'static str,
+    current_semantics: &'static str,
+    peak_semantics: &'static str,
+    current_bytes: Option<u64>,
+    peak_bytes: Option<u64>,
+}
+
 impl DeterministicCapture {
     fn new(duration_seconds: u32) -> Self {
         let samples = deterministic_stereo_input(duration_seconds);
@@ -189,6 +198,7 @@ fn main() {
     }
 
     let warm_runs = config.runs.saturating_sub(1);
+    let memory = memory_evidence();
 
     println!("format={FORMAT_VERSION}");
     println!("benchmark=dictation-post-stop-core");
@@ -225,6 +235,11 @@ fn main() {
         );
     }
     println!("transcript_bytes={transcript_bytes}");
+    println!("memory_source={}", memory.source);
+    println!("memory_current_semantics={}", memory.current_semantics);
+    println!("memory_peak_semantics={}", memory.peak_semantics);
+    print_optional_u64("memory_current_bytes", memory.current_bytes);
+    print_optional_u64("memory_peak_bytes", memory.peak_bytes);
 }
 
 fn parse_args() -> Result<Config, String> {
@@ -284,4 +299,107 @@ fn deterministic_stereo_input(duration_seconds: u32) -> Vec<f32> {
 
 fn millis(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1_000.0
+}
+
+fn print_optional_u64(key: &str, value: Option<u64>) {
+    match value {
+        Some(value) => println!("{key}={value}"),
+        None => println!("{key}=unavailable"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn memory_evidence() -> MemoryEvidence {
+    let status = std::fs::read_to_string("/proc/self/status").ok();
+    let current_bytes = status
+        .as_deref()
+        .and_then(|value| parse_linux_status_kib(value, "VmRSS:"));
+    let peak_bytes = status
+        .as_deref()
+        .and_then(|value| parse_linux_status_kib(value, "VmHWM:"));
+
+    MemoryEvidence {
+        source: "proc-self-status",
+        current_semantics: "linux-vmrss-resident-set",
+        peak_semantics: "linux-vmhwm-resident-set-high-water-mark",
+        current_bytes,
+        peak_bytes,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parse_linux_status_kib(status: &str, key: &str) -> Option<u64> {
+    let kib = status.lines().find_map(|line| {
+        let rest = line.strip_prefix(key)?;
+        rest.split_whitespace().next()?.parse::<u64>().ok()
+    })?;
+    kib.checked_mul(1024)
+}
+
+#[cfg(target_os = "windows")]
+fn memory_evidence() -> MemoryEvidence {
+    let pid = process::id();
+    let command = format!(
+        "$p=Get-Process -Id {pid}; Write-Output ($p.WorkingSet64.ToString() + ',' + $p.PeakWorkingSet64.ToString())"
+    );
+    let output = process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &command])
+        .output()
+        .ok();
+    let parsed = output.as_ref().and_then(|result| {
+        if !result.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&result.stdout);
+        let mut values = text.trim().split(',');
+        let current = values.next()?.trim().parse::<u64>().ok()?;
+        let peak = values.next()?.trim().parse::<u64>().ok()?;
+        Some((current, peak))
+    });
+
+    MemoryEvidence {
+        source: "windows-get-process",
+        current_semantics: "windows-working-set-size",
+        peak_semantics: "windows-peak-working-set-size",
+        current_bytes: parsed.map(|value| value.0),
+        peak_bytes: parsed.map(|value| value.1),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn memory_evidence() -> MemoryEvidence {
+    let pid = process::id().to_string();
+    let output = process::Command::new("/bin/ps")
+        .args(["-o", "rss=", "-p", &pid])
+        .output()
+        .ok();
+    let current_bytes = output.as_ref().and_then(|result| {
+        if !result.status.success() {
+            return None;
+        }
+        let kib = String::from_utf8_lossy(&result.stdout)
+            .trim()
+            .parse::<u64>()
+            .ok()?;
+        kib.checked_mul(1024)
+    });
+
+    MemoryEvidence {
+        source: "macos-ps-rss",
+        current_semantics: "macos-ps-resident-set",
+        peak_semantics: "external-usr-bin-time-l-required",
+        current_bytes,
+        peak_bytes: None,
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+fn memory_evidence() -> MemoryEvidence {
+    MemoryEvidence {
+        source: "unsupported-platform",
+        current_semantics: "unavailable",
+        peak_semantics: "unavailable",
+        current_bytes: None,
+        peak_bytes: None,
+    }
 }
