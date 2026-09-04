@@ -71,11 +71,23 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Build and upload validation bundles
+      # Keep package formats as separate action steps. A failing AppImage build
+      # must not erase evidence that the Debian package itself is healthy, and
+      # the failing format remains immediately visible in the job timeline.
+      - name: Build and upload Debian validation bundle
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
         with:
           projectPath: apps/desktop/src-tauri
-          args: "--bundles deb,appimage"
+          args: "--bundles deb"
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
+          uploadUpdaterJson: false
+
+      - name: Build and upload AppImage validation bundle
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
+        with:
+          projectPath: apps/desktop/src-tauri
+          args: "--verbose --bundles appimage"
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
           uploadUpdaterJson: false
