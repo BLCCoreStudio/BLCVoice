@@ -130,7 +130,7 @@ Capability discovery and operating-system-specific adapters for shortcuts, clipb
 
 ### `storage`
 
-Local history, settings and migrations. Raw audio retention is off by default.
+Local transcription history, schema migrations and retention semantics. The desktop application supplies an app-private data path; storage itself is independent of Tauri. Basic history uses text-only SQLite persistence behind a typed Rust service, with transactional migrations/writes, deterministic bounded reads and explicit deletion. Raw microphone audio, processed PCM and VAD buffers are not history data and are never retained by default. Delivery metadata must preserve the distinction between transcription, insertion-backend submission and semantic delivery verification. ADR 0027 defines the persistence policy.
 
 ### `diagnostics`
 
@@ -151,7 +151,9 @@ BLCVoice is designed around local ownership of dictation data.
 Initial defaults:
 
 - microphone audio is processed ephemerally and not retained after the dictation operation,
-- transcription history is local,
+- transcription history is local and text-only by default,
+- history persistence lives below the storage boundary rather than UI code,
+- history database/schema failures are surfaced rather than repaired through silent destructive reset,
 - network providers are opt-in,
 - secrets must not be stored as plaintext application settings,
 - integrations receive only explicitly granted capabilities,
@@ -189,7 +191,7 @@ Expected failures include:
 - focused target changes during a session,
 - clipboard/insertion is denied,
 - integration process disconnects,
-- persistence is unavailable.
+- persistence is unavailable or has an unsupported schema.
 
 Failures should be typed and actionable rather than collapsed into generic strings.
 
