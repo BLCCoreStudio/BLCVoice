@@ -99,7 +99,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("format=blcvoice-benchmark-v1");
     println!("benchmark=audio_preprocessing_48k_stereo_to_16k_mono");
-    println!("git_commit={}", option_env!("GIT_COMMIT").unwrap_or("unknown"));
+    println!(
+        "git_commit={}",
+        option_env!("GIT_COMMIT").unwrap_or("unknown")
+    );
     println!("os={}", env::consts::OS);
     println!("arch={}", env::consts::ARCH);
     println!(
