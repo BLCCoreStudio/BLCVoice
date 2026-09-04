@@ -23,10 +23,31 @@ The benchmark reports construction time separately from the first processing cal
 
 The generated input is deterministic and contains no microphone or user data. This benchmark deliberately does not claim ASR accuracy, model-load latency, end-to-end dictation latency, memory usage, or real desktop behavior.
 
+## transcribe.cpp ASR probe
+
+The `transcribe.cpp` adapter owns an engine-specific benchmark driver so native model/session policy does not leak into the engine-neutral `SpeechRecognizer` contract. Run it with a local model already managed or downloaded by the user:
+
+```bash
+cargo run --release -p blcvoice-asr-transcribe --example transcribe_benchmark -- \
+  --model /path/to/model --duration-seconds 2 --warm-runs 3
+```
+
+`--threads N` may be supplied to pin the adapter thread setting; zero delegates to the runtime default. The driver uses deterministic generated 16 kHz mono input and records:
+
+- model/session load time before any inference;
+- first inference latency and RTF;
+- warm reused-session total/mean latency and RTF;
+- engine, resolved model identity, resolved backend, thread setting and adapter version;
+- OS, architecture, logical CPU count and exact input shape.
+
+The generated signal is intended to exercise inference reproducibly, not to measure recognition accuracy. Transcript byte counts are emitted only to make completed inference observable; their text is not a quality metric. Model files are never downloaded by the benchmark and no microphone or user audio is read.
+
+Cold model/session load and first inference are deliberately separate from warm reused-session inference. Do not combine them into a single average. A release performance claim must also retain the exact model file identity/version outside the benchmark output when `model_id` alone is insufficient to reproduce the artifact.
+
 ## Evidence rules
 
 - Compare results only when the command, input shape, build mode and relevant runtime/model settings are equivalent.
-- Record OS, architecture, logical CPU count and exact commit; future engine-specific probes must also record model identity, runtime version and acceleration backend.
+- Record OS, architecture, logical CPU count and exact commit; engine-specific probes must also record model identity, runtime/adapter version where exposed and acceleration backend.
 - Distinguish cold construction/load from warm reuse. Do not average them together.
 - CI may compile and smoke-test deterministic benchmark tooling, but CI runner timings are not a release performance baseline.
 - Engine-specific measurements belong in the relevant ASR adapter or benchmark driver. The core benchmark contract must remain engine-neutral.
@@ -34,6 +55,6 @@ The generated input is deterministic and contains no microphone or user data. Th
 
 ## Research basis
 
-Criterion.rs documents warm-up, sampling, benchmark groups and throughput as distinct measurement concepts; BLCVoice follows the same separation even though the initial harness intentionally avoids adding a benchmark-framework dependency. `whisper.cpp` likewise records system/backend information and raw per-model benchmark output rather than presenting hardware-sensitive measurements without context.
+Criterion.rs documents warm-up, sampling, benchmark groups and throughput as distinct measurement concepts; BLCVoice follows the same separation even though the initial harness intentionally avoids adding a benchmark-framework dependency. `whisper.cpp` likewise reports load, encode/decode and total timings, and its benchmark tooling records system/backend context rather than presenting hardware-sensitive measurements without environment information.
 
-Future #43 slices can add ASR cold/warm model-load and inference measurements, post-stop-to-transcript timing, and reliable memory probes without changing this evidence contract.
+Issue #43 still owns post-stop-to-transcript timing, reliable memory/resource probes and later accuracy evidence. Those measurements must preserve the same engine-neutral/application-boundary separation.
