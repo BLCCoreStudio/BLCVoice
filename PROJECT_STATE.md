@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-05 against `main` at `7619dfdd125f2ece142abde32cc698e1a86f28db` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-05 against `main` at `79a03c2ccd06ae1d77e87e157c78c0edadaa6002` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -22,6 +22,7 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - lightweight dictation overlay and tray-resident behavior;
 - engine-agnostic Silero VAD integrated into production dictation;
 - recognizer reuse keyed to model identity so successful sessions avoid unnecessary reloads;
+- deterministic shortcut-to-dictation application-level E2E coverage at the production coordinator seam;
 - cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
 - a fail-closed aggregate critical CI validation gate from PR #47;
 - deterministic preprocessing, `transcribe.cpp` cold/warm ASR, post-stop, platform-qualified process-memory and reproducible WER evidence tooling from PRs #48-#52;
@@ -41,12 +42,13 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 - **PR #50 — `perf: add deterministic post-stop dictation benchmark`** merged as `7fc1d50714b81c913cd229fbfd0a8005fa6925e9` after the relevant checks passed on its unchanged head SHA.
 - **PR #52 — `perf: complete platform-qualified benchmark evidence foundation`** merged as `454293877f784584ed5f86fa193aab9f4b565093` after CI, Security Audit and Desktop bundles passed on unchanged head `bcfffc3edc1064afe442b81b8786cf1b77df6c8d`. Issue #43 is closed as completed.
 - **PR #54 — `test: establish canonical real-platform validation matrix`** merged as `7619dfdd125f2ece142abde32cc698e1a86f28db` after CI and Security Audit passed on unchanged head `45efd6d...`; issue #44 remains open because real desktop-session rows require runtime evidence.
+- **PR #56 — `test: add deterministic shortcut-to-dictation application harness`** merged as `79a03c2ccd06ae1d77e87e157c78c0edadaa6002` after CI, Security Audit, Desktop bundles and the fail-closed critical validation gate passed on unchanged head `cc9f6a9747acf42bda7c5ccc5c1cba4132ca247d`. Issue #55 is closed through the merge.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active work
 
-- **PR #56 / issue #55 — deterministic shortcut-to-dictation application E2E** — active. The branch exercises the production coordinator state-transition seam with deterministic capture/VAD/ASR/insertion fakes and covers success, no-speech, insertion failure with recoverable transcript, duplicate/stale input and stop-during-start. It must pass formatting, tests, Clippy, Security Audit, critical CI and bundle gates on one unchanged head before merge.
+- **#57 overlay delivery-semantics correctness** — active. The shortcut overlay currently needs to match the insertion contract: a successful receipt proves complete submission to the selected insertion backend, not semantic target-document mutation. The focused branch changes presentation wording only and must pass existing desktop/JS/CI/security/bundle gates before merge.
 - **#44 real-platform compatibility validation** — repository-side matrix is merged. Real Windows, macOS, Linux/X11, KDE Plasma 6 Wayland and GNOME Wayland semantic target-document evidence remains incomplete and must not be inferred from hosted runners, Xvfb or protocol acceptance.
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
 
@@ -54,7 +56,7 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 
 Longer-lived work is tracked in GitHub Issues, not a duplicate `ROADMAP.md`.
 
-- **#55** — deterministic shortcut-to-dictation application E2E; active in PR #56.
+- **#57** — keep overlay completion/progress copy aligned with truthful insertion-delivery semantics.
 - **#44** — execute the real-platform compatibility validation matrix on representative desktop sessions.
 - **#42** — align the live protected-branch ruleset with the critical validation matrix; repository-side implementation is complete, ruleset administration remains external.
 
@@ -66,18 +68,19 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Linux/X11 has a live Xvfb/XTEST smoke but not yet full shortcut-to-dictation semantic target-document validation.
 - Real KDE Plasma 6 and GNOME Wayland EIS rows require representative desktop sessions; package/compile evidence is not substituted for those runtime rows.
+- Basic local transcription history is still part of the initial product scope but is not yet represented by a dedicated implementation issue; create that work only after the current release-correctness fix is completed and accepted architecture/storage policy is reviewed.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 - Production signing/notarization credentials are not available to autonomous repository tooling and are not required for repository-side RC preparation.
 
 ## Next safe task
 
-**Validate and merge PR #56 on one unchanged head, then continue repository-side release-readiness work that does not depend on unavailable physical desktop sessions or production credentials.**
+**Validate and merge the focused #57 overlay delivery-semantics fix on one unchanged head, then derive the smallest production-grade local-history/diagnostics release-readiness task from accepted storage/privacy architecture without crossing external validation gates.**
 
 Exact next action:
 
-1. Run/observe formatting, full tests, Clippy, Security Audit, critical CI and desktop bundle validation for PR #56 on one exact head SHA.
+1. Open the #57 PR from the focused branch and run/observe JavaScript validation, full relevant tests, Clippy, Security Audit, critical CI and desktop bundle validation on one exact head SHA.
 2. Fix any failure on the same branch; merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-3. Close #55 through the merge and immediately inspect the remaining roadmap for the highest-value repository-side gap, prioritizing history/diagnostics, overlay/status-event correctness and release-readiness evidence before creating overlapping work.
+3. Reconcile `PROJECT_STATE.md` after the merge and inspect accepted ADR/storage/privacy boundaries before creating local-history persistence work; raw audio retention remains off by default and UI must not own persistence semantics.
 4. Execute any #44 runtime rows genuinely available through current tooling and save evidence tied to an exact commit; mark unavailable physical/session validation `BLOCKED_EXTERNAL` rather than passing.
 5. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
 6. Do **not** configure production signing/notarization credentials or publish a production release.
