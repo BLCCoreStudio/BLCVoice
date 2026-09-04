@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-04 against `main` at `64f9bcc6e4b634aa72ab7c21adf64747f2bd8155` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -21,24 +21,28 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - production shortcut-to-dictation wiring;
 - lightweight dictation overlay and tray-resident behavior;
 - engine-agnostic Silero VAD integrated into production dictation;
+- cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
 - the canonical autonomous-development/source-of-truth operating layer.
 
-Compatibility claims remain evidence-based. Compile/lint/unit coverage is not equivalent to real desktop-session validation.
+Compatibility claims remain evidence-based. Compile/lint/unit/package coverage is not equivalent to real desktop-session validation.
+
+## Recently completed
+
+- **PR #41 — `build: add cross-platform desktop bundle pipeline`** merged as `5e72ebd6d1c771f052c8b6ec34f5def97986d07d` after normal CI and the revised bundle matrix passed on the unchanged head SHA.
+- AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
+- Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active pull requests
 
-1. **PR #41 — `build: add cross-platform desktop bundle pipeline`**
+1. **PR #46 — `chore: refresh maintainer automation baseline`**
    - Current priority.
-   - Normal CI is green at head `1430cc7a8ea91b2c5c53cf18725938fb9a6a116a`.
-   - Bundle run `33845994202` produced Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, macOS x64 `.app`/`.dmg`, and the Linux Debian 12 `.deb` artifact on that same head.
-   - The Debian 12 production build requires `libclang-dev` because the PipeWire/SPA Rust bindings generate FFI bindings with bindgen.
-   - AppImage alone still failed in the linuxdeploy stage. Current Tauri upstream evidence also shows a material Wayland trust concern: the 2.11-era AppImage GTK hook forced `GDK_BACKEND=x11`; upstream #15786 now preserves an explicit backend, but BLCVoice has not verified the released bundler path or runtime-validated the artifact on KDE Wayland.
-   - Packaging policy is therefore narrowed to the proven matrix: Linux x64 `.deb` in Debian 12, Windows x64 NSIS on Windows Server 2025, macOS arm64/x64 `.app`/`.dmg` on explicit macOS 15 runners. AppImage is deferred behind explicit build + real-Wayland re-entry criteria in ADR 0026.
-   - macOS validation/draft artifacts use ad-hoc signing only. Production signing/notarization remains outside the autonomous trust boundary.
+   - Rebuilds the useful scope of stale PR #17 from current `main` rather than merging its old base forward.
+   - Adds CODEOWNERS, support/conduct policy, generated release-note categories, patch-only Dependabot auto-merge, and a scheduled RustSec audit.
+   - Must pass current CI on its exact head before merge.
 
 2. **PR #17 — `chore: establish maintainer automation baseline`**
-   - Adds CODEOWNERS/support/conduct/security-audit/release-note maintenance infrastructure.
-   - It predates substantial later `main` work and must be reconciled with current `main` before merge rather than assumed current.
+   - Superseded by PR #46 once #46 contains the reconciled source-of-truth update and validates cleanly.
+   - Do not merge #17 independently.
 
 ## Canonical backlog
 
@@ -59,18 +63,16 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 ## Next safe task
 
-**Finish PR #41 before starting another product feature.**
+**Finish PR #46 before starting another product feature.**
 
 Exact next action:
 
-1. Require Linux x64 `.deb`, Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, and macOS x64 `.app`/`.dmg` artifacts from the same current PR head.
-2. Require every applicable critical normal-CI job to pass on the current PR head.
-3. Confirm AppImage is absent from both validation and tag-triggered draft-release paths and that ADR 0026/release documentation states its evidence-based re-entry criteria.
-4. Confirm release-write permission remains confined to tag-triggered draft-release jobs.
-5. Inspect review threads and merge PR #41 only when normal CI and the revised bundle-validation matrix are green on the unchanged head SHA.
+1. Validate the new maintainer automation files against current `main` and current GitHub guidance.
+2. Require every applicable critical CI job to pass on the unchanged PR #46 head SHA.
+3. Inspect review threads and merge PR #46 only when its relevant checks are green.
+4. Close superseded PR #17 after #46 is safely merged.
+5. Then continue with issue #42 because merge-protection correctness is the highest remaining governance risk before benchmark and compatibility-matrix work.
 6. Do **not** configure production signing/notarization credentials or publish a production release.
-
-After #41 is safely merged, reconcile `PROJECT_STATE.md` to remove it from active work and make PR #17 the next safe task if it is still applicable. Then continue through issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
 
 ## Mandatory external gates
 
