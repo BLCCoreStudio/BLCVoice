@@ -44,6 +44,25 @@ The generated signal is intended to exercise inference reproducibly, not to meas
 
 Cold model/session load and first inference are deliberately separate from warm reused-session inference. Do not combine them into a single average. A release performance claim must also retain the exact model file identity/version outside the benchmark output when `model_id` alone is insufficient to reproduce the artifact.
 
+## Core post-stop dictation probe
+
+The engine-neutral dictation benchmark measures the application seam beginning when recording is stopped and ending when the core pipeline returns a transcript:
+
+```bash
+cargo run --release -p blcvoice-dictation --example post_stop_benchmark
+```
+
+Optional controls:
+
+```bash
+cargo run --release -p blcvoice-dictation --example post_stop_benchmark -- \
+  --duration-seconds 5 --runs 10
+```
+
+The probe constructs a deterministic in-memory 48 kHz stereo capture session, starts its timer immediately before `RecordingCollector::finalize()`, drains/finalizes the capture, preprocesses to the recognizer-required 16 kHz mono format and crosses the normal engine-neutral `SpeechRecognizer` contract. It records first and repeated finalization time plus first and repeated post-stop-to-transcript time.
+
+The recognizer in this probe is intentionally a deterministic contract stub. Therefore this benchmark measures core finalization/preprocessing/orchestration overhead; it does **not** represent real-model ASR latency. Use the adapter-owned `transcribe_benchmark` separately for model load and real inference evidence. Do not add the two measurements together and present the sum as a measured desktop-session E2E result: microphone callback timing, scheduling and real platform behavior are outside this deterministic probe.
+
 ## Evidence rules
 
 - Compare results only when the command, input shape, build mode and relevant runtime/model settings are equivalent.
@@ -51,10 +70,11 @@ Cold model/session load and first inference are deliberately separate from warm 
 - Distinguish cold construction/load from warm reuse. Do not average them together.
 - CI may compile and smoke-test deterministic benchmark tooling, but CI runner timings are not a release performance baseline.
 - Engine-specific measurements belong in the relevant ASR adapter or benchmark driver. The core benchmark contract must remain engine-neutral.
+- Synthetic core post-stop measurements and real-model adapter timings are separate evidence classes; neither proves real desktop E2E latency by itself.
 - Real-platform compatibility remains separate from performance benchmarking; package or benchmark success does not prove KDE Wayland, GNOME Wayland, X11, Windows or macOS runtime compatibility.
 
 ## Research basis
 
 Criterion.rs documents warm-up, sampling, benchmark groups and throughput as distinct measurement concepts; BLCVoice follows the same separation even though the initial harness intentionally avoids adding a benchmark-framework dependency. `whisper.cpp` likewise reports load, encode/decode and total timings, and its benchmark tooling records system/backend context rather than presenting hardware-sensitive measurements without environment information.
 
-Issue #43 still owns post-stop-to-transcript timing, reliable memory/resource probes and later accuracy evidence. Those measurements must preserve the same engine-neutral/application-boundary separation.
+Issue #43 still owns reliable memory/resource probes and later accuracy evidence. Resource measurements must retain platform-specific semantics rather than pretending Linux RSS/HWM, Windows working-set counters and macOS resident-memory counters are universally identical.
