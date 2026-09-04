@@ -175,7 +175,9 @@ impl HistoryStore {
                 "history database path cannot be empty".to_owned(),
             ));
         }
-        if let Some(parent) = path.parent() {
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
             fs::create_dir_all(parent).map_err(|error| {
                 StorageError::InvalidPath(format!(
                     "could not create history database directory {}: {error}",
@@ -328,7 +330,8 @@ impl HistoryStore {
 }
 
 fn migrate(connection: &mut Connection) -> Result<(), StorageError> {
-    let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let schema_version: i64 =
+        connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if schema_version > SCHEMA_VERSION {
         return Err(StorageError::UnsupportedSchema {
             found: schema_version,
@@ -387,18 +390,26 @@ fn ensure_schema_present(connection: &Connection) -> Result<(), StorageError> {
 }
 
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<HistoryEntry, StorageError>> {
-    let invocation_source: String = row.get(3)?;
-    let delivery_state: String = row.get(8)?;
+    let invocation_source_raw: String = row.get(3)?;
+    let delivery_state_raw: String = row.get(8)?;
+    let invocation_source = match InvocationSource::parse(&invocation_source_raw) {
+        Ok(value) => value,
+        Err(error) => return Ok(Err(error)),
+    };
+    let delivery_state = match DeliveryState::parse(&delivery_state_raw) {
+        Ok(value) => value,
+        Err(error) => return Ok(Err(error)),
+    };
     Ok(Ok(HistoryEntry {
         id: row.get(0)?,
         created_at_unix_ms: row.get(1)?,
         transcript: row.get(2)?,
-        invocation_source: InvocationSource::parse(&invocation_source)?,
+        invocation_source,
         engine_id: row.get(4)?,
         model_id: row.get(5)?,
         detected_language: row.get(6)?,
         insertion_backend: row.get(7)?,
-        delivery_state: DeliveryState::parse(&delivery_state)?,
+        delivery_state,
     }))
 }
 
@@ -425,7 +436,9 @@ mod tests {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("history.sqlite3");
         let store = HistoryStore::open(&path).expect("open");
-        let entry = store.append(&sample(10, "merhaba dünya")).expect("append");
+        let entry = store
+            .append(&sample(10, "merhaba dünya"))
+            .expect("append");
         drop(store);
 
         let reopened = HistoryStore::open(&path).expect("reopen");
@@ -441,7 +454,10 @@ mod tests {
         let third = store.append(&sample(30, "third")).expect("append third");
 
         let listed = store.list_recent(3).expect("list");
-        assert_eq!(listed.iter().map(|entry| entry.id).collect::<Vec<_>>(), vec![third.id, second.id, first.id]);
+        assert_eq!(
+            listed.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![third.id, second.id, first.id]
+        );
     }
 
     #[test]
@@ -480,8 +496,14 @@ mod tests {
     fn list_limit_is_bounded() {
         let directory = tempdir().expect("tempdir");
         let store = HistoryStore::open(directory.path().join("history.sqlite3")).expect("open");
-        assert!(matches!(store.list_recent(0), Err(StorageError::InvalidInput(_))));
-        assert!(matches!(store.list_recent(MAX_LIST_LIMIT + 1), Err(StorageError::InvalidInput(_))));
+        assert!(matches!(
+            store.list_recent(0),
+            Err(StorageError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            store.list_recent(MAX_LIST_LIMIT + 1),
+            Err(StorageError::InvalidInput(_))
+        ));
     }
 
     #[test]
@@ -489,15 +511,22 @@ mod tests {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("history.sqlite3");
         let connection = Connection::open(&path).expect("seed database");
-        connection.pragma_update(None, "user_version", SCHEMA_VERSION + 1).expect("set version");
+        connection
+            .pragma_update(None, "user_version", SCHEMA_VERSION + 1)
+            .expect("set version");
         drop(connection);
 
         assert!(matches!(
             HistoryStore::open(&path),
-            Err(StorageError::UnsupportedSchema { found: 2, supported: 1 })
+            Err(StorageError::UnsupportedSchema {
+                found: 2,
+                supported: 1
+            })
         ));
         let connection = Connection::open(&path).expect("reopen raw");
-        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).expect("read version");
+        let version: i64 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("read version");
         assert_eq!(version, 2);
     }
 
@@ -506,9 +535,14 @@ mod tests {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join("history.sqlite3");
         let connection = Connection::open(&path).expect("seed database");
-        connection.pragma_update(None, "user_version", SCHEMA_VERSION).expect("set version");
+        connection
+            .pragma_update(None, "user_version", SCHEMA_VERSION)
+            .expect("set version");
         drop(connection);
 
-        assert!(matches!(HistoryStore::open(&path), Err(StorageError::CorruptData(_))));
+        assert!(matches!(
+            HistoryStore::open(&path),
+            Err(StorageError::CorruptData(_))
+        ));
     }
 }
