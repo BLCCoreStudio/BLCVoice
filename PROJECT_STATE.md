@@ -43,7 +43,7 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 ## Active work
 
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
-- **#43 benchmark foundation** — active. Preprocessing, adapter-owned model/session load and cold/warm ASR inference, and deterministic engine-neutral post-stop probes are merged. The current slice adds reliable process-memory evidence while preserving Linux, Windows and macOS counter semantics instead of presenting one false universal RAM metric.
+- **#43 benchmark foundation / PR #52** — active. The branch now combines the final benchmark-evidence slices: platform-qualified process-memory counters with native semantics plus an engine-neutral corpus WER scorer that requires explicit aligned reference/hypothesis transcripts. Synthetic generated inference input remains excluded from accuracy evidence.
 
 ## Canonical backlog
 
@@ -59,20 +59,20 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 - The live protected-branch ruleset does not yet require `Critical validation gate`; the repository-side check exists and the exact administration action is documented in `docs/ci-required-checks.md`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
-- Platform-qualified process-memory evidence is the active #43 slice; later accuracy evidence remains before benchmark-foundation closure.
+- PR #52 must still prove the final #43 memory + accuracy-evidence tooling on one unchanged head SHA before #43 can close.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
-**Continue issue #43 while keeping #42's live-ruleset administration gap explicit.**
+**Finish #43 on PR #52, then continue directly with #44 while keeping #42's live-ruleset administration gap explicit.**
 
 Exact next action:
 
-1. Validate the platform-qualified process-memory benchmark changes with formatting, tests, Clippy and the cross-platform CI matrix on their exact PR head SHA.
+1. Validate the platform-qualified process-memory evidence and accuracy scorer with formatting, tests, Clippy, Security Audit and the cross-platform CI/bundle matrix on one exact PR head SHA.
 2. Keep hosted-runner timing and memory results informational; do not establish release thresholds from CI runners.
-3. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-4. Continue #43 with a reproducible engine-neutral accuracy-scoring/evidence contract using explicit reference transcripts; do not treat deterministic generated inference input as an accuracy corpus.
-5. Close #43 only when its acceptance criteria are met, then continue directly with #44.
+3. Accuracy evidence must retain the explicit reference/hypothesis corpus plus engine/model/runtime/environment metadata; generated synthetic inference input is never an accuracy corpus.
+4. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
+5. If the #43 acceptance criteria remain satisfied after merge, close #43 and continue immediately with #44 real-platform compatibility evidence.
 6. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
 7. Do **not** configure production signing/notarization credentials or publish a production release.
 
