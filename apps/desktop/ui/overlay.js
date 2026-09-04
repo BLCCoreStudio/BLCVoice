@@ -53,11 +53,11 @@ function applyLifecycle(payload) {
       void showOverlay();
       break;
     case "finishing":
-      render("Transcribing", "Processing locally and inserting text…", "working", false);
+      render("Transcribing", "Processing locally and preparing text submission…", "working", false);
       void showOverlay();
       break;
     case "completed":
-      render("Done", "Transcript submitted to the active app", "success", false);
+      render("Submitted", "Complete transcript accepted by the insertion backend", "success", false);
       void showOverlay();
       void hideOverlay(generation, 1400);
       break;
