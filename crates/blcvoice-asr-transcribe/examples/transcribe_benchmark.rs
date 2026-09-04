@@ -121,8 +121,7 @@ fn parse_args() -> Result<Config, String> {
                 )?;
             }
             "--warm-runs" => {
-                warm_runs =
-                    parse_positive(&next_value(&mut args, "--warm-runs")?, "warm runs")?;
+                warm_runs = parse_positive(&next_value(&mut args, "--warm-runs")?, "warm runs")?;
             }
             "--threads" => {
                 n_threads = next_value(&mut args, "--threads")?
