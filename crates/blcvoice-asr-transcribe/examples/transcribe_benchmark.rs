@@ -4,7 +4,9 @@ use std::process;
 use std::time::{Duration, Instant};
 
 use blcvoice_asr::{AudioFormat, AudioInput, RecognitionOptions, SpeechRecognizer};
-use blcvoice_asr_transcribe::{TranscribeBackend, TranscribeRecognizer, TranscribeRecognizerConfig};
+use blcvoice_asr_transcribe::{
+    TranscribeBackend, TranscribeRecognizer, TranscribeRecognizerConfig,
+};
 
 const FORMAT_VERSION: &str = "blcvoice-benchmark-v1";
 const SAMPLE_RATE_HZ: u32 = 16_000;
@@ -28,7 +30,8 @@ fn main() {
     });
 
     let samples = deterministic_input(config.duration_seconds);
-    let format = AudioFormat::new(CHANNELS, SAMPLE_RATE_HZ).expect("constant audio format is valid");
+    let format =
+        AudioFormat::new(CHANNELS, SAMPLE_RATE_HZ).expect("constant audio format is valid");
     let input = AudioInput::new(&samples, format).expect("generated benchmark audio is valid");
     let audio_duration = Duration::from_secs(u64::from(config.duration_seconds));
 
@@ -48,20 +51,24 @@ fn main() {
 
     let options = RecognitionOptions::default();
     let cold_started = Instant::now();
-    let cold = recognizer.transcribe(input, &options).unwrap_or_else(|error| {
-        eprintln!("cold inference failed: {error}");
-        process::exit(1);
-    });
+    let cold = recognizer
+        .transcribe(input, &options)
+        .unwrap_or_else(|error| {
+            eprintln!("cold inference failed: {error}");
+            process::exit(1);
+        });
     let cold_elapsed = cold_started.elapsed();
 
     let mut warm_total = Duration::ZERO;
     let mut warm_text_bytes = 0usize;
     for _ in 0..config.warm_runs {
         let started = Instant::now();
-        let transcript = recognizer.transcribe(input, &options).unwrap_or_else(|error| {
-            eprintln!("warm inference failed: {error}");
-            process::exit(1);
-        });
+        let transcript = recognizer
+            .transcribe(input, &options)
+            .unwrap_or_else(|error| {
+                eprintln!("warm inference failed: {error}");
+                process::exit(1);
+            });
         warm_total += started.elapsed();
         warm_text_bytes = warm_text_bytes.saturating_add(transcript.text.len());
     }
@@ -115,10 +122,8 @@ fn parse_args() -> Result<Config, String> {
         match argument.as_str() {
             "--model" => model = Some(PathBuf::from(next_value(&mut args, "--model")?)),
             "--duration-seconds" => {
-                duration_seconds = parse_positive(
-                    &next_value(&mut args, "--duration-seconds")?,
-                    "duration",
-                )?;
+                duration_seconds =
+                    parse_positive(&next_value(&mut args, "--duration-seconds")?, "duration")?;
             }
             "--warm-runs" => {
                 warm_runs = parse_positive(&next_value(&mut args, "--warm-runs")?, "warm runs")?;
