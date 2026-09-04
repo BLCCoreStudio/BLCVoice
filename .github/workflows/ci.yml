@@ -196,3 +196,29 @@ jobs:
         run: cargo +1.98.0 test --locked -p blcvoice-desktop --all-targets
       - name: Lint desktop shell
         run: cargo +1.98.0 clippy --locked -p blcvoice-desktop --all-targets -- -D warnings
+
+  required-ci:
+    name: Required CI
+    if: ${{ always() }}
+    needs:
+      - lockfile
+      - core
+      - quality
+      - x11-insertion
+      - audio
+      - asr
+      - desktop-linux
+      - desktop-native
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every critical CI job
+        shell: bash
+        run: |
+          test "${{ needs.lockfile.result }}" = "success"
+          test "${{ needs.core.result }}" = "success"
+          test "${{ needs.quality.result }}" = "success"
+          test "${{ needs.x11-insertion.result }}" = "success"
+          test "${{ needs.audio.result }}" = "success"
+          test "${{ needs.asr.result }}" = "success"
+          test "${{ needs.desktop-linux.result }}" = "success"
+          test "${{ needs.desktop-native.result }}" = "success"
