@@ -30,10 +30,6 @@ jobs:
     runs-on: ubuntu-24.04
     container: debian:12
     timeout-minutes: 60
-    env:
-      # AppImage build tools are AppImages themselves; containers do not expose
-      # FUSE, so use their supported extract-and-run path instead.
-      APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - name: Install Debian build prerequisites
         shell: bash
@@ -72,23 +68,11 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      # Keep package formats as separate action steps. A failing AppImage build
-      # must not erase evidence that the Debian package itself is healthy, and
-      # the failing format remains immediately visible in the job timeline.
       - name: Build and upload Debian validation bundle
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
         with:
           projectPath: apps/desktop/src-tauri
           args: "--bundles deb"
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
-          uploadUpdaterJson: false
-
-      - name: Build and upload AppImage validation bundle
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
-        with:
-          projectPath: apps/desktop/src-tauri
-          args: "--verbose --bundles appimage"
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
           uploadUpdaterJson: false
@@ -146,10 +130,6 @@ jobs:
     runs-on: ubuntu-24.04
     container: debian:12
     timeout-minutes: 60
-    env:
-      # Keep release packaging aligned with validation: avoid requiring FUSE
-      # inside the Debian container when linuxdeploy/appimagetool execute.
-      APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - name: Install Debian build prerequisites
         shell: bash
@@ -188,18 +168,18 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Build bundles and create draft prerelease
+      - name: Build bundle and create draft prerelease
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # 1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop/src-tauri
-          args: "--bundles deb,appimage"
+          args: "--bundles deb"
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
           tagName: ${{ github.ref_name }}
           releaseName: "BLCVoice v__VERSION__"
-          releaseBody: "Cross-platform BLCVoice desktop bundles. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
+          releaseBody: "Cross-platform BLCVoice desktop bundles. Linux currently ships a Debian package only; AppImage remains deferred pending verified Wayland-safe upstream bundling and runtime validation. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
           releaseDraft: true
           prerelease: true
           generateReleaseNotes: true
@@ -252,7 +232,7 @@ jobs:
           workflowArtifactNamePattern: "BLCVoice-[platform]-[arch]-[bundle]"
           tagName: ${{ github.ref_name }}
           releaseName: "BLCVoice v__VERSION__"
-          releaseBody: "Cross-platform BLCVoice desktop bundles. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
+          releaseBody: "Cross-platform BLCVoice desktop bundles. Linux currently ships a Debian package only; AppImage remains deferred pending verified Wayland-safe upstream bundling and runtime validation. Windows bundles are unsigned; macOS bundles use ad-hoc signing only and are not Developer ID signed or notarized."
           releaseDraft: true
           prerelease: true
           generateReleaseNotes: true

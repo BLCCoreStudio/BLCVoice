@@ -8,14 +8,16 @@ Changes that can affect the desktop bundle trigger build-only validation. The sa
 
 Current validation outputs:
 
-- Linux x64 in a Debian 12 container: `.deb` and `.AppImage`
+- Linux x64 in a Debian 12 container: `.deb`
 - Windows x64 on Windows Server 2025: NSIS installer
 - macOS arm64 on macOS 15: `.app` and `.dmg`
 - macOS x64 on macOS 15 Intel: `.app` and `.dmg`
 
 Validation jobs use read-only repository permissions and upload generated bundles only as workflow artifacts. They do not create a GitHub Release.
 
-Debian 12 is intentionally used as the Linux packaging baseline. Tauri identifies Debian 12 as a suitable WebKitGTK 4.1/AppImage compatibility baseline, while BLCVoice's CPAL 0.18.2 native PipeWire backend requires PipeWire 0.3.53 or newer. Debian 12 provides PipeWire 0.3.65; Ubuntu 22.04's 0.3.48 development headers are too old for that backend. Normal compile/test CI may use newer Linux images independently.
+Debian 12 is intentionally used as the Linux packaging baseline. BLCVoice's CPAL 0.18.2 native PipeWire backend requires PipeWire 0.3.53 or newer; Debian 12 provides PipeWire 0.3.65, while Ubuntu 22.04's 0.3.48 development headers are too old for that backend. Normal compile/test CI may use newer Linux images independently.
+
+AppImage is intentionally not in the current release matrix. Live PR #41 validation produced the Debian package successfully but failed in the AppImage/linuxdeploy stage. Separately, Tauri issue #15781 documented that the 2.11-era AppImage GTK hook forced `GDK_BACKEND=x11`, silently downgrading Wayland sessions to XWayland; Tauri merged #15786 to preserve an explicitly configured backend. BLCVoice will not claim or ship an AppImage until the selected released bundler is verified to contain the required behavior, packaging is green, and a produced artifact is runtime-validated on real KDE Wayland without silent XWayland fallback.
 
 ## Tagged draft releases
 
@@ -34,6 +36,6 @@ The repository intentionally does not contain production signing identities or c
 - Ad-hoc signing is **not** Developer ID signing and does not imply notarization or Gatekeeper trust.
 - Production Developer ID signing/notarization, Windows production code signing, certificate/account operations and credential handling remain mandatory human stop gates.
 
-A successful bundle job proves that the package can be produced on the declared build environment. It does not prove trust-store acceptance, semantic text-insertion compatibility, or support on every target machine/application.
+A successful bundle job proves that the package can be produced on the declared build environment. It does not prove trust-store acceptance, semantic text-insertion compatibility, native-Wayland behavior, or support on every target machine/application.
 
 Never downgrade these distinctions in release notes. Runtime insertion compatibility and operating-system signing are separate release gates.

@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-03 against `main` at `64f9bcc6e4b634aa72ab7c21adf64747f2bd8155` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-04 against `main` at `64f9bcc6e4b634aa72ab7c21adf64747f2bd8155` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -29,14 +29,12 @@ Compatibility claims remain evidence-based. Compile/lint/unit coverage is not eq
 
 1. **PR #41 — `build: add cross-platform desktop bundle pipeline`**
    - Current priority.
-   - The previous CI run `33790324156` ended `action_required` before creating jobs. Its actor and triggering actor were `github-actions[bot]`, matching GitHub's recursion-protection behavior for workflow-triggered pull-request activity using `GITHUB_TOKEN`; this was not an application test failure.
-   - A direct branch update restored normal runnable CI and started the dedicated bundle-validation workflow.
-   - macOS arm64 `.app` and `.dmg` artifacts were successfully produced in bundle run `33798107152`.
-   - The first Linux bundle attempt on Ubuntu 22.04 failed in `libspa`: BLCVoice enables CPAL 0.18.2's native PipeWire backend, which requires PipeWire 0.3.53+, while Ubuntu 22.04 supplied 0.3.48 development headers.
-   - Linux packaging is being moved to a Debian 12 container. Debian 12 supplies PipeWire 0.3.65 while remaining a Tauri-recommended WebKitGTK/AppImage compatibility baseline.
-   - Packaging policy: Linux x64 `.deb`/`.AppImage` in Debian 12, Windows x64 NSIS on Windows Server 2025, macOS arm64/x64 `.app`/`.dmg` on explicit macOS 15 runners.
+   - Normal CI is green at head `1430cc7a8ea91b2c5c53cf18725938fb9a6a116a`.
+   - Bundle run `33845994202` produced Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, macOS x64 `.app`/`.dmg`, and the Linux Debian 12 `.deb` artifact on that same head.
+   - The Debian 12 production build requires `libclang-dev` because the PipeWire/SPA Rust bindings generate FFI bindings with bindgen.
+   - AppImage alone still failed in the linuxdeploy stage. Current Tauri upstream evidence also shows a material Wayland trust concern: the 2.11-era AppImage GTK hook forced `GDK_BACKEND=x11`; upstream #15786 now preserves an explicit backend, but BLCVoice has not verified the released bundler path or runtime-validated the artifact on KDE Wayland.
+   - Packaging policy is therefore narrowed to the proven matrix: Linux x64 `.deb` in Debian 12, Windows x64 NSIS on Windows Server 2025, macOS arm64/x64 `.app`/`.dmg` on explicit macOS 15 runners. AppImage is deferred behind explicit build + real-Wayland re-entry criteria in ADR 0026.
    - macOS validation/draft artifacts use ad-hoc signing only. Production signing/notarization remains outside the autonomous trust boundary.
-   - ADR 0026 records the material packaging/release trust-boundary decision and the evidence behind the Debian 12 baseline.
 
 2. **PR #17 — `chore: establish maintainer automation baseline`**
    - Adds CODEOWNERS/support/conduct/security-audit/release-note maintenance infrastructure.
@@ -57,6 +55,7 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 - The protected-branch required-check list does not yet cover every critical CI job; issue #42 owns the reconciliation.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Reproducible model/runtime latency, real-time factor, resource-use and later accuracy evidence is not yet a canonical benchmark system; issue #43 owns that foundation.
+- AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
@@ -64,13 +63,12 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 Exact next action:
 
-1. Validate the revised Debian 12 Linux packaging job and require `.deb` plus `.AppImage` workflow artifacts.
-2. Require Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, and macOS x64 `.app`/`.dmg` artifacts from the same current PR head.
-3. Require every applicable critical normal-CI job to pass on the current PR head.
-4. Inspect any packaging/architecture-specific failure logs and repair only with current upstream evidence.
-5. Confirm release-write permission remains confined to tag-triggered draft-release jobs.
-6. Merge PR #41 only when normal CI, bundle validation, review-thread and architecture/ADR documentation gates are green.
-7. Do **not** configure production signing/notarization credentials or publish a production release.
+1. Require Linux x64 `.deb`, Windows x64 NSIS, macOS arm64 `.app`/`.dmg`, and macOS x64 `.app`/`.dmg` artifacts from the same current PR head.
+2. Require every applicable critical normal-CI job to pass on the current PR head.
+3. Confirm AppImage is absent from both validation and tag-triggered draft-release paths and that ADR 0026/release documentation states its evidence-based re-entry criteria.
+4. Confirm release-write permission remains confined to tag-triggered draft-release jobs.
+5. Inspect review threads and merge PR #41 only when normal CI and the revised bundle-validation matrix are green on the unchanged head SHA.
+6. Do **not** configure production signing/notarization credentials or publish a production release.
 
 After #41 is safely merged, reconcile `PROJECT_STATE.md` to remove it from active work and make PR #17 the next safe task if it is still applicable. Then continue through issues #42, #43 and #44 by current risk/blocking value, with broken-main/security/regression work taking precedence if it appears.
 

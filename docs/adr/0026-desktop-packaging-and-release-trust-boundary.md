@@ -14,6 +14,9 @@ The initial packaging branch used one dynamic runner per operating system and gr
 - BLCVoice enables CPAL 0.18.2's native PipeWire backend on Linux. CPAL requires PipeWire 0.3.53 or newer for that backend.
 - A real Ubuntu 22.04 bundle run failed while compiling `libspa`: the runner supplied PipeWire 0.3.48 development headers, which are older than CPAL's required native PipeWire API level.
 - Debian 12 provides PipeWire 0.3.65 development packages and remains one of Tauri's recommended compatibility-oriented baselines, so it satisfies both constraints without raising the Linux glibc baseline to Ubuntu 24.04.
+- A later Debian 12 run proved the production binary and `.deb` package can be built successfully once the `libclang` prerequisite required by PipeWire/SPA bindgen is installed.
+- The same run continued to fail only at Tauri's AppImage/linuxdeploy stage. This is consistent with current upstream reports of AppImage failures in containerized CI even when normal Linux packages build successfully.
+- More importantly for BLCVoice's Wayland-first contract, Tauri issue #15781 documented that the AppImage GTK hook in the 2.11-era bundler forced `GDK_BACKEND=x11`, silently downgrading Wayland sessions to XWayland. Tauri merged #15786 on 2026-07-27 to preserve an explicitly configured backend, but BLCVoice has not yet established that its release bundler contains the fix or runtime-validated an AppImage on KDE Wayland.
 - GitHub's current hosted-runner matrix makes `macos-latest` arm64, while separate Intel runner labels are available; one macOS runner therefore does not validate both primary desktop architectures.
 - Tauri recommends ad-hoc signing when building macOS applications without an Apple-authenticated signing identity, especially for Apple Silicon artifacts.
 - GitHub Actions permissions can be scoped per job, so build-only pull-request/manual validation does not require release write permission.
@@ -22,7 +25,8 @@ The initial packaging branch used one dynamic runner per operating system and gr
 
 BLCVoice desktop packaging uses the following policy:
 
-- Linux x64 release bundles are built inside a Debian 12 container on a GitHub-hosted Linux runner and produce `.deb` plus `.AppImage` artifacts.
+- Linux x64 release bundles are built inside a Debian 12 container on a GitHub-hosted Linux runner and currently produce a `.deb` artifact.
+- AppImage distribution is deferred. It may be reintroduced only after the selected Tauri bundler is verified to preserve an explicitly requested Wayland backend, AppImage packaging is green in the declared build environment, and a produced artifact is runtime-validated on real KDE Wayland without silent XWayland fallback.
 - The Linux release build preserves BLCVoice's production audio feature set, including native PipeWire and PulseAudio support; packaging must not silently compile a reduced-capability binary just to fit an older distro image.
 - Windows x64 release bundles are built on Windows Server 2025 and produce an NSIS installer.
 - macOS release bundles are built separately for arm64 (`macos-15`) and x64 (`macos-15-intel`), each producing `.app` and `.dmg` artifacts.
@@ -48,7 +52,15 @@ Rejected. A release artifact should not silently differ from the production Linu
 
 ### Build Linux bundles on Ubuntu 24.04
 
-Rejected as the default release baseline. It satisfies newer PipeWire requirements, but it unnecessarily raises the likely glibc floor of AppImage output relative to Debian 12. Debian 12 satisfies both Tauri's baseline guidance and CPAL's PipeWire requirement.
+Rejected as the default release baseline. It satisfies newer PipeWire requirements, but it unnecessarily raises the likely glibc floor of portable Linux output relative to Debian 12. Debian 12 satisfies both Tauri's baseline guidance and CPAL's PipeWire requirement.
+
+### Keep AppImage in the release matrix despite current failure
+
+Rejected. A permanently red package target is not release readiness, and forcing a workaround without runtime evidence would violate the repository's truthful-capability policy. The 2.11-era GTK hook's X11 override is also directly at odds with BLCVoice's Wayland-first behavior. Deferral keeps the proven `.deb` path shippable while making AppImage re-entry criteria explicit.
+
+### Patch `GDK_BACKEND` inside BLCVoice solely to ship AppImage
+
+Deferred. Tauri has already merged an upstream fix for explicit backend preservation. Carrying a local bundler/runtime workaround before verifying the released upstream behavior would create avoidable maintenance and still would not substitute for real KDE Wayland validation.
 
 ### Build only `macos-latest`
 
@@ -74,17 +86,21 @@ Primary upstream and live evidence consulted for this decision:
 - Tauri GitHub Actions pipeline guide: https://v2.tauri.app/distribute/pipelines/github/
 - Tauri macOS signing guidance: https://v2.tauri.app/distribute/sign/macos/
 - Tauri prerequisites: https://v2.tauri.app/start/prerequisites/
+- Tauri AppImage Wayland backend issue #15781: https://github.com/tauri-apps/tauri/issues/15781
+- Tauri fix #15786, merged 2026-07-27: https://github.com/tauri-apps/tauri/pull/15786
+- Tauri container/AppImage failure report #14796: https://github.com/tauri-apps/tauri/issues/14796
 - CPAL 0.18.2 source/dependency metadata, including native PipeWire `v0_3_53`: https://docs.rs/crate/cpal/0.18.2/source/Cargo.toml.orig
 - CPAL backend support table, PipeWire minimum 0.3.53: https://docs.rs/crate/cpal/0.18.2/source/README.md
 - Debian 12 `libpipewire-0.3-dev` 0.3.65 package: https://packages.debian.org/bookworm/libpipewire-0.3-dev
 - GitHub-hosted runner reference: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 - GitHub `GITHUB_TOKEN` workflow-trigger behavior: https://docs.github.com/en/actions/concepts/security/github_token
-- PR #41 bundle-validation run `33798107152`, Linux job `100790604729`: Ubuntu 22.04 installed PipeWire 0.3.48 and failed compiling `libspa` against CPAL's newer native PipeWire API contract.
+- PR #41 bundle run `33845994202` at head `1430cc7a8ea91b2c5c53cf18725938fb9a6a116a`: Linux `.deb`, Windows NSIS and both macOS architecture bundles were produced; only the AppImage step failed.
 
 ## Consequences
 
 - Linux packaging adds a containerized Debian bootstrap step, increasing setup time but making the release build environment explicit and reproducible.
-- The Linux bundle retains native PipeWire/PulseAudio capability while using a compatibility-oriented glibc baseline.
+- The Linux `.deb` retains native PipeWire/PulseAudio capability while using a compatibility-oriented baseline.
+- AppImage portability is intentionally unavailable until its build and native-Wayland behavior meet the same evidence standard as other delivery claims.
 - Bundle validation costs more CI time because macOS is tested on two architectures, but failures become architecture-specific and support claims are better grounded.
 - Draft artifacts can be produced autonomously without exposing production signing credentials.
 - Production distribution remains intentionally blocked at the signing/notarization/account boundary until the required human-controlled credentials and policies exist.
