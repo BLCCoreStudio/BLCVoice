@@ -210,7 +210,10 @@ fn main() {
     println!("source_frames={first_source_frames}");
     println!("asr_frames={first_asr_frames}");
     println!("first_finalize_ms={:.3}", millis(first_finalize));
-    println!("first_post_stop_to_transcript_ms={:.3}", millis(first_post_stop));
+    println!(
+        "first_post_stop_to_transcript_ms={:.3}",
+        millis(first_post_stop)
+    );
     if warm_runs > 0 {
         println!(
             "warm_finalize_mean_ms={:.3}",
@@ -232,10 +235,8 @@ fn parse_args() -> Result<Config, String> {
     while let Some(argument) = args.next() {
         match argument.as_str() {
             "--duration-seconds" => {
-                duration_seconds = parse_positive(
-                    &next_value(&mut args, "--duration-seconds")?,
-                    "duration",
-                )?;
+                duration_seconds =
+                    parse_positive(&next_value(&mut args, "--duration-seconds")?, "duration")?;
             }
             "--runs" => {
                 runs = parse_positive(&next_value(&mut args, "--runs")?, "runs")?;
