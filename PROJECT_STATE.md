@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-04 against `main` at `21fd32218fc40a41dc5e50cbee85dd2e6f32892c` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-05 against `main` at `7fc1d50714b81c913cd229fbfd0a8005fa6925e9` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -23,7 +23,7 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - engine-agnostic Silero VAD integrated into production dictation;
 - cross-platform desktop bundle validation for Linux x64 `.deb`, Windows x64 NSIS, and macOS arm64/x64 `.app` + `.dmg`;
 - a fail-closed aggregate critical CI validation gate from PR #47;
-- deterministic preprocessing and `transcribe.cpp` cold/warm ASR benchmark probes from PRs #48 and #49;
+- deterministic preprocessing, `transcribe.cpp` cold/warm ASR and core post-stop benchmark probes from PRs #48-#50;
 - the canonical autonomous-development/source-of-truth operating layer;
 - reconciled maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation from PR #46.
 
@@ -36,13 +36,14 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 - **PR #47 — `ci: add fail-closed critical validation gate`** merged as `ba54d262dca84a02f28b61c166ea19da8e4f6e0f` after the relevant checks passed on its unchanged head SHA.
 - **PR #48 — `perf: add reproducible preprocessing benchmark foundation`** merged as `41a6fdcbb303296d550f0400b35fb4e1acaf6932` after CI, Security Audit and Desktop bundles passed on unchanged head `27ca6538a43b3493ff7e07ee67b1b4f30ce18398`.
 - **PR #49 — `perf: add transcribe ASR cold/warm benchmark`** merged as `21fd32218fc40a41dc5e50cbee85dd2e6f32892c` after CI, Security Audit and Desktop bundles passed on unchanged head `d2330b9e7ed2c603a5bbadf94c666ca3fb19187d`.
+- **PR #50 — `perf: add deterministic post-stop dictation benchmark`** merged as `7fc1d50714b81c913cd229fbfd0a8005fa6925e9` after the relevant checks passed on its unchanged head SHA.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active work
 
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
-- **#43 benchmark foundation** — active. Preprocessing plus adapter-owned model/session load and cold/warm ASR inference probes are merged. The current slice adds a deterministic engine-neutral post-stop core dictation probe over the real finalization/preprocessing/`SpeechRecognizer` contract seam without claiming real-model or desktop-session E2E latency.
+- **#43 benchmark foundation / PR #52** — active. The branch now combines the final benchmark-evidence slices: platform-qualified process-memory counters with native semantics plus an engine-neutral corpus WER scorer that requires explicit aligned reference/hypothesis transcripts. Synthetic generated inference input remains excluded from accuracy evidence.
 
 ## Canonical backlog
 
@@ -58,20 +59,20 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 
 - The live protected-branch ruleset does not yet require `Critical validation gate`; the repository-side check exists and the exact administration action is documented in `docs/ci-required-checks.md`.
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
-- Reliable resource-use and later accuracy evidence remain incomplete; issue #43 owns that foundation. The deterministic post-stop benchmark does not claim microphone/runtime scheduling or real-model desktop E2E latency.
+- PR #52 must still prove the final #43 memory + accuracy-evidence tooling on one unchanged head SHA before #43 can close.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 
 ## Next safe task
 
-**Continue issue #43 while keeping #42's live-ruleset administration gap explicit.**
+**Finish #43 on PR #52, then continue directly with #44 while keeping #42's live-ruleset administration gap explicit.**
 
 Exact next action:
 
-1. Validate the deterministic post-stop dictation benchmark on its exact PR head SHA with formatting, tests, Clippy and the cross-platform CI matrix.
-2. Keep CI timing results informational; do not establish performance thresholds from hosted-runner timing.
-3. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
-4. Continue #43 with reliable platform-qualified resource-use probes and close the issue only when its acceptance criteria are met without overstating cross-platform memory semantics.
-5. Continue with #44 after the benchmark foundation is stable.
+1. Validate the platform-qualified process-memory evidence and accuracy scorer with formatting, tests, Clippy, Security Audit and the cross-platform CI/bundle matrix on one exact PR head SHA.
+2. Keep hosted-runner timing and memory results informational; do not establish release thresholds from CI runners.
+3. Accuracy evidence must retain the explicit reference/hypothesis corpus plus engine/model/runtime/environment metadata; generated synthetic inference input is never an accuracy corpus.
+4. Merge only when all relevant checks are green, review threads are clear and the head SHA is unchanged.
+5. If the #43 acceptance criteria remain satisfied after merge, close #43 and continue immediately with #44 real-platform compatibility evidence.
 6. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
 7. Do **not** configure production signing/notarization credentials or publish a production release.
 
@@ -80,7 +81,7 @@ Exact next action:
 Autonomous work stops before:
 
 - production signing/notarization credential handling;
-- production release/store/account operations requiring external account authority;
+- production release-account, app-store/account operations requiring external account authority;
 - secret/credential creation, entry, rotation or disclosure outside an already-authorized safe mechanism;
 - paid or financially binding irreversible external-service commitments;
 - legal/account-level terms or agreement acceptance on the user's behalf;
