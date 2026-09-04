@@ -42,19 +42,36 @@ impl ShortcutDictationCoordinator {
         }
     }
 
-    fn request_start<R: Runtime>(&self, app: AppHandle<R>) {
-        let should_start = {
-            let mut state = self.lock_state();
-            if matches!(*state, CoordinatorState::Idle) {
-                *state = CoordinatorState::Starting {
-                    stop_requested: false,
-                };
-                true
-            } else {
-                false
-            }
+    fn begin_start(&self) -> bool {
+        let mut state = self.lock_state();
+        if !matches!(*state, CoordinatorState::Idle) {
+            return false;
+        }
+        *state = CoordinatorState::Starting {
+            stop_requested: false,
         };
-        if !should_start {
+        true
+    }
+
+    fn begin_stop(&self) -> Option<SessionId> {
+        let mut state = self.lock_state();
+        match *state {
+            CoordinatorState::Starting { .. } => {
+                *state = CoordinatorState::Starting {
+                    stop_requested: true,
+                };
+                None
+            }
+            CoordinatorState::Recording(session_id) => {
+                *state = CoordinatorState::Finishing(session_id);
+                Some(session_id)
+            }
+            CoordinatorState::Idle | CoordinatorState::Finishing(_) => None,
+        }
+    }
+
+    fn request_start<R: Runtime>(&self, app: AppHandle<R>) {
+        if !self.begin_start() {
             return;
         }
 
@@ -127,24 +144,7 @@ impl ShortcutDictationCoordinator {
     }
 
     fn request_stop<R: Runtime>(&self, app: AppHandle<R>) {
-        let session_to_finish = {
-            let mut state = self.lock_state();
-            match *state {
-                CoordinatorState::Starting { .. } => {
-                    *state = CoordinatorState::Starting {
-                        stop_requested: true,
-                    };
-                    None
-                }
-                CoordinatorState::Recording(session_id) => {
-                    *state = CoordinatorState::Finishing(session_id);
-                    Some(session_id)
-                }
-                CoordinatorState::Idle | CoordinatorState::Finishing(_) => None,
-            }
-        };
-
-        if let Some(session_id) = session_to_finish {
+        if let Some(session_id) = self.begin_stop() {
             spawn_finish(app, session_id);
         }
     }
@@ -329,12 +329,224 @@ fn emit_lifecycle<R: Runtime>(app: &AppHandle<R>, payload: DictationLifecycleEve
 mod tests {
     use super::*;
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum FakeVadOutcome {
+        Speech,
+        NoSpeech,
+    }
+
+    #[derive(Debug, Clone)]
+    struct FakeAudioCapture {
+        samples: Vec<f32>,
+    }
+
+    impl FakeAudioCapture {
+        fn capture(&self) -> &[f32] {
+            &self.samples
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct FakeVad {
+        outcome: FakeVadOutcome,
+    }
+
+    impl FakeVad {
+        fn detect(&self, samples: &[f32]) -> FakeVadOutcome {
+            if samples.is_empty() {
+                FakeVadOutcome::NoSpeech
+            } else {
+                self.outcome
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct FakeAsr {
+        text: String,
+    }
+
+    impl FakeAsr {
+        fn transcribe(&self, samples: &[f32]) -> String {
+            assert!(
+                !samples.is_empty(),
+                "ASR must only run after speech detection"
+            );
+            self.text.clone()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct FakeInsertion {
+        result: Result<&'static str, &'static str>,
+    }
+
+    impl FakeInsertion {
+        fn insert(&self, text: &str) -> Result<&'static str, &'static str> {
+            assert!(!text.is_empty(), "empty text must not be submitted");
+            self.result
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum HarnessTerminal {
+        Delivered {
+            text: String,
+            backend: &'static str,
+        },
+        NoSpeech,
+        Failed {
+            code: &'static str,
+            recoverable_text: Option<String>,
+        },
+    }
+
+    struct ApplicationHarness {
+        coordinator: ShortcutDictationCoordinator,
+        capture: FakeAudioCapture,
+        vad: FakeVad,
+        asr: FakeAsr,
+        insertion: FakeInsertion,
+        next_session: u64,
+        terminal: Option<HarnessTerminal>,
+    }
+
+    impl ApplicationHarness {
+        fn new(vad: FakeVadOutcome, insertion: Result<&'static str, &'static str>) -> Self {
+            Self {
+                coordinator: ShortcutDictationCoordinator::default(),
+                capture: FakeAudioCapture {
+                    samples: vec![0.1, 0.2, 0.3, 0.4],
+                },
+                vad: FakeVad { outcome: vad },
+                asr: FakeAsr {
+                    text: "Merhaba BLCVoice 👋".to_owned(),
+                },
+                insertion: FakeInsertion { result: insertion },
+                next_session: 1,
+                terminal: None,
+            }
+        }
+
+        fn apply(&mut self, decision: ShortcutDecision) {
+            match decision {
+                ShortcutDecision::StartDictation => {
+                    if !self.coordinator.begin_start() {
+                        return;
+                    }
+                    let session_id = SessionId::new(self.next_session);
+                    self.next_session += 1;
+                    match self.coordinator.complete_start(session_id) {
+                        StartCompletion::Recording => {}
+                        StartCompletion::FinishImmediately => self.finish(session_id),
+                        StartCompletion::CancelUnexpected => {
+                            self.coordinator.reset();
+                            self.terminal = Some(HarnessTerminal::Failed {
+                                code: "coordinator_state_invalid",
+                                recoverable_text: None,
+                            });
+                        }
+                    }
+                }
+                ShortcutDecision::StopDictation => {
+                    if let Some(session_id) = self.coordinator.begin_stop() {
+                        self.finish(session_id);
+                    }
+                }
+                ShortcutDecision::Ignore => {}
+            }
+        }
+
+        fn finish(&mut self, session_id: SessionId) {
+            let samples = self.capture.capture();
+            match self.vad.detect(samples) {
+                FakeVadOutcome::NoSpeech => {
+                    self.terminal = Some(HarnessTerminal::NoSpeech);
+                }
+                FakeVadOutcome::Speech => {
+                    let text = self.asr.transcribe(samples);
+                    self.terminal = Some(match self.insertion.insert(&text) {
+                        Ok(backend) => HarnessTerminal::Delivered { text, backend },
+                        Err(code) => HarnessTerminal::Failed {
+                            code,
+                            recoverable_text: Some(text),
+                        },
+                    });
+                }
+            }
+            self.coordinator.complete_finish(session_id);
+        }
+    }
+
+    #[test]
+    fn shortcut_application_happy_path_only_marks_success_after_insertion_receipt() {
+        let mut harness = ApplicationHarness::new(FakeVadOutcome::Speech, Ok("fakeInsertion"));
+        harness.apply(ShortcutDecision::StartDictation);
+        harness.apply(ShortcutDecision::StopDictation);
+
+        assert_eq!(
+            harness.terminal,
+            Some(HarnessTerminal::Delivered {
+                text: "Merhaba BLCVoice 👋".to_owned(),
+                backend: "fakeInsertion",
+            })
+        );
+        assert_eq!(*harness.coordinator.lock_state(), CoordinatorState::Idle);
+    }
+
+    #[test]
+    fn shortcut_application_no_speech_never_invokes_asr_or_insertion() {
+        let mut harness = ApplicationHarness::new(FakeVadOutcome::NoSpeech, Ok("fakeInsertion"));
+        harness.apply(ShortcutDecision::StartDictation);
+        harness.apply(ShortcutDecision::StopDictation);
+
+        assert_eq!(harness.terminal, Some(HarnessTerminal::NoSpeech));
+        assert_eq!(*harness.coordinator.lock_state(), CoordinatorState::Idle);
+    }
+
+    #[test]
+    fn shortcut_application_insertion_failure_preserves_recoverable_transcript() {
+        let mut harness =
+            ApplicationHarness::new(FakeVadOutcome::Speech, Err("insertion_backend_failed"));
+        harness.apply(ShortcutDecision::StartDictation);
+        harness.apply(ShortcutDecision::StopDictation);
+
+        assert_eq!(
+            harness.terminal,
+            Some(HarnessTerminal::Failed {
+                code: "insertion_backend_failed",
+                recoverable_text: Some("Merhaba BLCVoice 👋".to_owned()),
+            })
+        );
+        assert_eq!(*harness.coordinator.lock_state(), CoordinatorState::Idle);
+    }
+
+    #[test]
+    fn duplicate_start_and_stale_stop_are_ignored_without_corrupting_session() {
+        let coordinator = ShortcutDictationCoordinator::default();
+        assert!(coordinator.begin_start());
+        assert!(!coordinator.begin_start());
+        let session_id = SessionId::new(21);
+        assert_eq!(
+            coordinator.complete_start(session_id),
+            StartCompletion::Recording
+        );
+        assert_eq!(coordinator.begin_stop(), Some(session_id));
+        assert_eq!(coordinator.begin_stop(), None);
+        coordinator.complete_finish(SessionId::new(99));
+        assert_eq!(
+            *coordinator.lock_state(),
+            CoordinatorState::Finishing(session_id)
+        );
+        coordinator.complete_finish(session_id);
+        assert_eq!(*coordinator.lock_state(), CoordinatorState::Idle);
+    }
+
     #[test]
     fn stop_during_start_is_queued_until_recording_exists() {
         let coordinator = ShortcutDictationCoordinator::default();
-        *coordinator.lock_state() = CoordinatorState::Starting {
-            stop_requested: true,
-        };
+        assert!(coordinator.begin_start());
+        assert_eq!(coordinator.begin_stop(), None);
         let session_id = SessionId::new(9);
 
         assert_eq!(
@@ -350,9 +562,7 @@ mod tests {
     #[test]
     fn successful_start_becomes_recording() {
         let coordinator = ShortcutDictationCoordinator::default();
-        *coordinator.lock_state() = CoordinatorState::Starting {
-            stop_requested: false,
-        };
+        assert!(coordinator.begin_start());
         let session_id = SessionId::new(4);
 
         assert_eq!(
