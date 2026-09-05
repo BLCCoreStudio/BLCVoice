@@ -32,6 +32,7 @@ blcvoice-platform = { path = "../../../crates/blcvoice-platform" }
 blcvoice-runtime = { path = "../../../crates/blcvoice-runtime" }
 blcvoice-shortcuts = { path = "../../../crates/blcvoice-shortcuts" }
 blcvoice-dictation = { path = "../../../crates/blcvoice-dictation" }
+blcvoice-storage = { path = "../../../crates/blcvoice-storage" }
 blcvoice-vad = { path = "../../../crates/blcvoice-vad" }
 blcvoice-vad-silero = { path = "../../../crates/blcvoice-vad-silero" }
 reqwest = { version = "0.13.4", features = ["blocking"] }

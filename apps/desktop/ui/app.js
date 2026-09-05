@@ -46,6 +46,11 @@ const elements = {
   insertionDetail: document.getElementById("insertion-detail"),
   recognizerDetail: document.getElementById("recognizer-detail"),
   recognizerBackend: document.getElementById("recognizer-backend"),
+  refreshHistory: document.getElementById("refresh-history"),
+  historyMessage: document.getElementById("history-message"),
+  historyList: document.getElementById("history-list"),
+  historyBackend: document.getElementById("history-backend"),
+  historyDetail: document.getElementById("history-detail"),
 };
 
 const state = {
@@ -63,6 +68,7 @@ const state = {
   testAutoFinishStarted: false,
   shortcutLifecycleUnlisten: null,
   shortcutSessionActive: false,
+  historyBusy: false,
 };
 
 function commandErrorMessage(error) {
@@ -224,6 +230,7 @@ async function finishDictation() {
   } finally {
     state.dictationBusy = false;
     updateDictationControls();
+    await refreshHistory();
   }
 }
 
@@ -587,6 +594,89 @@ async function cancelTest() {
   }
 }
 
+function historyDeliveryLabel(stateName) {
+  switch (stateName) {
+    case "deliveredVerified": return "delivery verified";
+    case "backendSubmittedUnverified": return "submitted · verification unavailable";
+    case "insertionFailed": return "insertion failed · text recovered";
+    case "transcribedOnly": return "transcribed only";
+    default: return stateName || "unknown state";
+  }
+}
+
+function renderHistory(entries) {
+  elements.historyList.replaceChildren();
+  if (!entries.length) {
+    elements.historyMessage.textContent = "No local transcripts yet.";
+    return;
+  }
+  elements.historyMessage.textContent = `${entries.length} recent local transcript${entries.length === 1 ? "" : "s"}.`;
+  for (const entry of entries) {
+    const card = document.createElement("article");
+    card.className = "history-item";
+    const transcript = document.createElement("p");
+    transcript.textContent = entry.transcript;
+    card.append(transcript);
+
+    const footer = document.createElement("div");
+    footer.className = "history-item-footer";
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const timestamp = new Date(entry.createdAtUnixMs).toLocaleString();
+    const source = entry.invocationSource === "shortcut" ? "Shortcut" : "Desktop UI";
+    const language = entry.detectedLanguage ? entry.detectedLanguage.toUpperCase() : "language unknown";
+    meta.textContent = `${timestamp} · ${source} · ${language} · ${historyDeliveryLabel(entry.deliveryState)}`;
+    footer.append(meta);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button danger compact history-delete";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", async () => {
+      if (state.historyBusy) return;
+      state.historyBusy = true;
+      remove.disabled = true;
+      try {
+        await invoke("history_delete", { id: entry.id });
+        state.historyBusy = false;
+        await refreshHistory();
+      } catch (error) {
+        elements.historyMessage.textContent = commandErrorMessage(error);
+      } finally {
+        state.historyBusy = false;
+      }
+    });
+    footer.append(remove);
+    card.append(footer);
+    elements.historyList.append(card);
+  }
+}
+
+async function refreshHistory() {
+  if (!invoke || state.historyBusy) return;
+  elements.refreshHistory.disabled = true;
+  try {
+    const health = await invoke("history_status");
+    elements.historyBackend.textContent = health.available ? "Available" : "Unavailable";
+    elements.historyDetail.textContent = health.lastError || health.databasePath || "Local SQLite history";
+    if (!health.available) {
+      elements.historyList.replaceChildren();
+      elements.historyMessage.textContent = health.lastError || "Local history is unavailable. Dictation remains available.";
+      return;
+    }
+    const entries = await invoke("history_list", { limit: 100 });
+    renderHistory(Array.isArray(entries) ? entries : []);
+  } catch (error) {
+    const message = commandErrorMessage(error);
+    elements.historyBackend.textContent = "Unavailable";
+    elements.historyDetail.textContent = message;
+    elements.historyList.replaceChildren();
+    elements.historyMessage.textContent = message;
+  } finally {
+    elements.refreshHistory.disabled = false;
+  }
+}
+
 async function refreshDiagnostics() {
   if (!invoke) return;
   elements.refreshDiagnostics.disabled = true;
@@ -675,6 +765,7 @@ function applyShortcutLifecycle(payload) {
       return;
   }
 
+  if (payload.state === "completed" || payload.state === "failed") void refreshHistory();
   updateDictationControls();
 }
 
@@ -730,7 +821,7 @@ async function bootstrap() {
   try {
     await subscribeShortcutLifecycle();
     await loadSettings();
-    await Promise.all([refreshDevices(), refreshModels(), refreshDiagnostics(), recoverDesktopStatus()]);
+    await Promise.all([refreshDevices(), refreshModels(), refreshDiagnostics(), refreshHistory(), recoverDesktopStatus()]);
   } catch (error) {
     showDictationError(error);
   }
@@ -747,6 +838,7 @@ elements.startTest.addEventListener("click", () => void startTest());
 elements.finishTest.addEventListener("click", () => void finishTest(false));
 elements.cancelTest.addEventListener("click", () => void cancelTest());
 elements.refreshDiagnostics.addEventListener("click", () => void refreshDiagnostics());
+elements.refreshHistory.addEventListener("click", () => void refreshHistory());
 window.addEventListener("beforeunload", () => {
   if (state.shortcutLifecycleUnlisten) {
     state.shortcutLifecycleUnlisten();

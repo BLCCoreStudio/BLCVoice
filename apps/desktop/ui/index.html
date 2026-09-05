@@ -135,6 +135,19 @@
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="history-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="step-label">HISTORY</p>
+            <h2 id="history-heading">Local transcripts</h2>
+          </div>
+          <button id="refresh-history" class="button secondary compact" type="button">Refresh</button>
+        </div>
+        <p class="panel-copy">BLCVoice stores transcript text and delivery metadata in your private app-data directory. Microphone audio, PCM and VAD buffers are never kept in history.</p>
+        <div id="history-message" class="message muted" role="status">Loading local history…</div>
+        <div id="history-list" class="history-list" aria-live="polite"></div>
+      </section>
+
       <section class="panel diagnostics-panel" aria-labelledby="diagnostics-heading">
         <div class="panel-heading">
           <div>
@@ -158,6 +171,11 @@
             <span>Recognizer</span>
             <strong id="recognizer-detail">Not loaded</strong>
             <small id="recognizer-backend">Starts on first dictation.</small>
+          </article>
+          <article class="diagnostic-item">
+            <span>Local history</span>
+            <strong id="history-backend">Checking…</strong>
+            <small id="history-detail">—</small>
           </article>
         </div>
       </section>

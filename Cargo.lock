@@ -342,6 +342,7 @@ dependencies = [
  "blcvoice-platform",
  "blcvoice-runtime",
  "blcvoice-shortcuts",
+ "blcvoice-storage",
  "blcvoice-vad",
  "blcvoice-vad-silero",
  "futures-util",
