@@ -86,9 +86,8 @@ impl HistoryService {
             return;
         }
 
-        // The legacy insertion-error DTO intentionally exposes only recoverable text.
-        // Preserve that text without inventing recognizer provenance. A follow-up can
-        // enrich failure metadata when the internal finish outcome carries it directly.
+        // The insertion-error DTO intentionally exposes only recoverable text.
+        // Preserve it without inventing recognizer provenance.
         let result = self.append(NewHistoryEntry {
             created_at_unix_ms: unix_time_ms(),
             transcript: text.to_owned(),
@@ -177,9 +176,12 @@ struct ReportHistoryMetadata {
     semantic_delivery_verified: bool,
 }
 
-fn report_history_metadata(report: &DictationReportDto) -> Result<ReportHistoryMetadata, StorageError> {
-    let value = serde_json::to_value(report)
-        .map_err(|error| StorageError::CorruptData(format!("could not encode dictation metadata: {error}")))?;
+fn report_history_metadata(
+    report: &DictationReportDto,
+) -> Result<ReportHistoryMetadata, StorageError> {
+    let value = serde_json::to_value(report).map_err(|error| {
+        StorageError::CorruptData(format!("could not encode dictation metadata: {error}"))
+    })?;
     Ok(ReportHistoryMetadata {
         engine_id: required_string(&value, "engineId")?,
         model_id: required_string(&value, "modelId")?,
@@ -246,13 +248,13 @@ pub async fn dictation_finish(
     app: tauri::AppHandle,
     session_id: u64,
 ) -> Result<DictationReportDto, CommandErrorDto> {
-    tauri::async_runtime::spawn_blocking(move || {
-        finish_and_record(&app, SessionId::new(session_id), InvocationOrigin::DesktopUi)
-    })
-    .await
-    .map_err(|error| {
-        CommandErrorDto::blocking_worker(format!("desktop blocking worker failed: {error}"))
-    })?
+    let result = crate::ipc::dictation_finish(app.clone(), session_id).await;
+    let history = app.state::<HistoryService>();
+    match &result {
+        Ok(report) => history.record_report(report, InvocationOrigin::DesktopUi),
+        Err(error) => history.record_failure(error, InvocationOrigin::DesktopUi),
+    }
+    result
 }
 
 #[derive(Debug, Serialize)]
@@ -299,7 +301,7 @@ pub fn history_status(state: State<'_, HistoryService>) -> HistoryHealthDto {
 }
 
 #[tauri::command]
-pub async fn history_list(
+pub fn history_list(
     state: State<'_, HistoryService>,
     limit: Option<u32>,
 ) -> Result<Vec<HistoryEntryDto>, String> {
@@ -311,10 +313,7 @@ pub async fn history_list(
 }
 
 #[tauri::command]
-pub async fn history_delete(
-    state: State<'_, HistoryService>,
-    id: i64,
-) -> Result<bool, String> {
+pub fn history_delete(state: State<'_, HistoryService>, id: i64) -> Result<bool, String> {
     state.delete(id).map_err(|error| error.to_string())
 }
 
