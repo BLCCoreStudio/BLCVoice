@@ -24,30 +24,30 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("apps/desktop/src-tauri/src/coordinator.rs")
           text = path.read_text()
           import_anchor = "use crate::ipc::{CommandErrorDto, DesktopState, DictationReportDto};\n"
-          import_replacement = "use crate::history::{InvocationOrigin, finish_and_record};\n" + import_anchor
-          if import_anchor not in text:
-              raise SystemExit("expected coordinator import anchor not found")
+          import_replacement = "use crate::history::{finish_and_record, InvocationOrigin};\n" + import_anchor
+          if text.count(import_anchor) != 1:
+              raise SystemExit("expected exactly one coordinator import anchor")
           text = text.replace(import_anchor, import_replacement, 1)
 
-          old = '''        let result = tauri::async_runtime::spawn_blocking(move || {
-              worker_app
-                  .state::<DesktopState>()
-                  .finish_dictation_session(session_id)
-          })
-          .await;
-          '''
-          new = '''        let result = tauri::async_runtime::spawn_blocking(move || {
-              finish_and_record(&worker_app, session_id, InvocationOrigin::Shortcut)
-          })
-          .await;
-          '''
-          if old not in text:
-              raise SystemExit("expected shortcut finish block not found")
-          text = text.replace(old, new, 1)
+          pattern = re.compile(
+              r"let result = tauri::async_runtime::spawn_blocking\(move \|\| \{\s*"
+              r"worker_app\s*\.state::<DesktopState>\(\)\s*"
+              r"\.finish_dictation_session\(session_id\)\s*\}\)\s*\.await;"
+          )
+          replacement = (
+              "let result = tauri::async_runtime::spawn_blocking(move || {\n"
+              "            finish_and_record(&worker_app, session_id, InvocationOrigin::Shortcut)\n"
+              "        })\n"
+              "        .await;"
+          )
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected exactly one shortcut finish block, found {count}")
           path.write_text(text)
           PY
       - name: Format coordinator
