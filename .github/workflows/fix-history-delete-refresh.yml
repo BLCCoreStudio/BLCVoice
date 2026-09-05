@@ -14,32 +14,15 @@ jobs:
   fix:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: feat/desktop-history-wiring
           persist-credentials: true
       - name: Fix exact delete refresh block
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('apps/desktop/ui/app.js')
-          text = path.read_text()
-          old = '''      try {
-        await invoke("history_delete", { id: entry.id });
-        await refreshHistory();
-      } catch (error) {
-'''
-          new = '''      try {
-        await invoke("history_delete", { id: entry.id });
-        state.historyBusy = false;
-        await refreshHistory();
-      } catch (error) {
-'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one delete refresh block, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
-          PY
-          node --check apps/desktop/ui/app.js
+        run: python3 -c "from pathlib import Path; p=Path('apps/desktop/ui/app.js'); t=p.read_text(); old='        await invoke(\"history_delete\", { id: entry.id });\\n        await refreshHistory();'; new='        await invoke(\"history_delete\", { id: entry.id });\\n        state.historyBusy = false;\\n        await refreshHistory();'; assert t.count(old) == 1, t.count(old); p.write_text(t.replace(old, new, 1))"
+      - name: Validate JavaScript
+        run: node --check apps/desktop/ui/app.js
       - name: Commit fix
         run: |
           git config user.name "github-actions[bot]"
