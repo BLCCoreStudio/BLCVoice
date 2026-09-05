@@ -2,7 +2,7 @@
 
 This file is the canonical operational snapshot for autonomous development. It does not replace `ARCHITECTURE.md`, `docs/adr/`, GitHub Issues, pull requests, CI or repository rulesets.
 
-Last reconciled: 2026-09-05 against `main` at `2d113569e32206b68c383d5c1ff401ee0305ee18` plus live GitHub PR/issue state.
+Last reconciled: 2026-09-05 against `main` at `9a7eec51a3d78dfbe89567eb51da80b8cc16d5d0` plus live GitHub PR/issue state.
 
 ## Development stage
 
@@ -29,10 +29,11 @@ BLCVoice is pre-alpha. The priority remains a reliable local-first universal dic
 - deterministic preprocessing, `transcribe.cpp` cold/warm ASR, post-stop, platform-qualified process-memory and reproducible WER evidence tooling from PRs #48-#52;
 - a canonical real-platform validation matrix and evidence template from PR #54;
 - accepted ADR 0027 defining privacy-first, text-only local SQLite history persistence with no raw-audio retention;
+- a Tauri-independent `blcvoice-storage` SQLite boundary with schema versioning, transactional writes, bounded ordered queries, explicit deletion and fail-closed newer/corrupt schema behavior from PR #62;
 - the canonical autonomous-development/source-of-truth operating layer;
 - reconciled maintainer ownership, support/conduct, release-note, RustSec and patch-only Dependabot automation from PR #46.
 
-Compatibility claims remain evidence-based. Compile/lint/unit/package coverage is not equivalent to real desktop-session validation.
+PR #63 currently adds the desktop application/history seam, history IPC/UI and persistence-health diagnostics on top of that merged storage boundary. Compatibility claims remain evidence-based. Compile/lint/unit/package coverage is not equivalent to real desktop-session validation.
 
 ## Recently completed
 
@@ -46,13 +47,14 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 - **PR #54 — `test: establish canonical real-platform validation matrix`** merged as `7619dfdd125f2ece142abde32cc698e1a86f28db` after CI and Security Audit passed on unchanged head `45efd6d...`; issue #44 remains open because real desktop-session rows require runtime evidence.
 - **PR #56 — `test: add deterministic shortcut-to-dictation application harness`** merged as `79a03c2ccd06ae1d77e87e157c78c0edadaa6002` after CI, Security Audit, Desktop bundles and the fail-closed critical validation gate passed on unchanged head `cc9f6a9747acf42bda7c5ccc5c1cba4132ca247d`. Issue #55 is closed through the merge.
 - **PR #58 — `fix: keep overlay delivery semantics truthful`** merged as `b483acf1c34a7db8af5ce5947345ca8aa5b27f5f` after CI, Security Audit and all desktop bundle jobs passed on unchanged head `f8aaed828840aec03420c68449f89708fddb8408`. Issue #57 is closed through the merge.
-- **PR #60 — `docs: define privacy-first local history persistence`** merged as `2d113569e32206b68c383d5c1ff401ee0305ee18` after CI and Security Audit passed on unchanged head `8270047e099146592950ac29da140a22ee0c3bc8`. ADR 0027 is now accepted on `main`.
+- **PR #60 — `docs: define privacy-first local history persistence`** merged as `2d113569e32206b68c383d5c1ff401ee0305ee18` after CI and Security Audit passed on unchanged head `8270047e099146592950ac29da140a22ee0c3bc8`. ADR 0027 is accepted on `main`.
+- **PR #62 — `feat: implement privacy-first local history storage`** merged as `9a7eec51a3d78dfbe89567eb51da80b8cc16d5d0` after CI, Security Audit and Desktop bundles passed on unchanged head `a2fd3513a9a44a8eaf4764a0a2a80721d3ece1d1`. The local-history storage contract is now implemented on `main`.
 - AppImage remains intentionally deferred. Re-entry requires a verified Wayland-safe released Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence without silent XWayland fallback.
 - Production signing/notarization remains outside the autonomous trust boundary.
 
 ## Active work
 
-- **#59 privacy-first local history storage** — active. PR #62 implements the accepted ADR 0027 storage boundary with a dedicated Tauri-independent `blcvoice-storage` crate, bundled SQLite, explicit schema versioning, transactional writes, typed errors, bounded ordered queries and deletion. Desktop dictation/history IPC/UI wiring remains the focused follow-up after the storage contract is green.
+- **#59 privacy-first local history storage** — active through PR #63. Storage is merged. PR #63 wires both desktop-UI and shortcut dictation completion into the application history service, preserves recoverable insertion-failure text without upgrading delivery semantics, exposes bounded list/delete/status IPC, adds the local history panel and persistence-health diagnostics, and keeps persistence failures non-fatal to dictation outcomes.
 - **#44 real-platform compatibility validation** — repository-side matrix is merged. Real Windows, macOS, Linux/X11, KDE Plasma 6 Wayland and GNOME Wayland semantic target-document evidence remains incomplete and must not be inferred from hosted runners, Xvfb or protocol acceptance.
 - **#42 external governance follow-up** — repository-side CI gate work is merged. The live `main-protection` ruleset still requires an administration-capable settings update to require `Critical validation gate`; this remains documented in `docs/ci-required-checks.md` and must not be misrepresented as complete.
 
@@ -60,7 +62,7 @@ Compatibility claims remain evidence-based. Compile/lint/unit/package coverage i
 
 Longer-lived work is tracked in GitHub Issues, not a duplicate `ROADMAP.md`.
 
-- **#59** — validate/merge PR #62, then wire history into the production dictation application layer and expose a basic local history UI with explicit deletion and persistence-health diagnostics.
+- **#59** — validate PR #63 on one unchanged head and close the issue only after the desktop history application seam, UI, deletion and persistence-health acceptance criteria are green.
 - **#44** — execute the real-platform compatibility validation matrix on representative desktop sessions.
 - **#42** — align the live protected-branch ruleset with the critical validation matrix; repository-side implementation is complete, ruleset administration remains external.
 
@@ -72,25 +74,22 @@ Create additional issues only after checking for overlapping PRs/issues and acce
 - Real Windows/macOS/X11/KDE Wayland/GNOME Wayland end-to-end compatibility evidence is incomplete; issue #44 owns the cross-platform validation matrix.
 - Linux/X11 has a live Xvfb/XTEST smoke but not yet full shortcut-to-dictation semantic target-document validation.
 - Real KDE Plasma 6 and GNOME Wayland EIS rows require representative desktop sessions; package/compile evidence is not substituted for those runtime rows.
-- Basic local transcription history is not yet wired into the desktop application. ADR 0027 is accepted; PR #62 owns the storage crate, and #59 owns the subsequent application/history UI integration.
-- Diagnostics currently expose microphone, shortcut, insertion and recognizer status in the desktop UI but do not yet include history/persistence health; add it when the storage service is wired.
+- PR #63 still requires final unchanged-head CI/Security Audit/bundle validation before local history can be treated as merged application capability.
 - AppImage is not a current deliverable. Re-entry requires a verified Wayland-safe Tauri bundler, green AppImage packaging, and real KDE Wayland runtime evidence.
 - Production signing/notarization credentials are not available to autonomous repository tooling and are not required for repository-side RC preparation.
 
 ## Next safe task
 
-**Validate and merge PR #62's storage crate on one unchanged head, then wire #59 history persistence into the desktop application seam before adding the history UI.**
+**Validate and merge PR #63 on one unchanged head, then move the repository-side critical path to remaining release-readiness work and genuinely available #44 runtime evidence.**
 
 Exact next action:
 
-1. Require PR #62 formatting, storage/workspace tests, Clippy, RustSec, critical cross-platform CI and desktop bundle validation to pass on one unchanged head SHA; fix any red job before merge.
-2. After PR #62 merges, wire successful transcriptions and insertion-failure recoverable text into history with truthful delivery state. Persistence failures must remain observable but must not falsify the underlying dictation/insertion outcome.
-3. Add typed history IPC for bounded listing and explicit deletion, then a basic local history UI that renders those results without owning SQL or retention policy.
-4. Extend diagnostics with persistence/history health and cover reopen/write/read/delete failure paths without retaining raw audio.
-5. Run the full unchanged-head CI/Security Audit/bundle matrix after application wiring and close #59 only when its acceptance criteria are genuinely complete.
-6. Execute any #44 runtime rows genuinely available through current tooling and save evidence tied to an exact commit; mark unavailable physical/session validation `BLOCKED_EXTERNAL` rather than passing.
-7. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
-8. Do **not** configure production signing/notarization credentials or publish a production release.
+1. Require PR #63 formatting, workspace/desktop tests, Clippy, RustSec, fail-closed critical CI and desktop bundle validation to pass on one unchanged head SHA; fix any red job and re-run the whole acceptance set after the final code change.
+2. Confirm history records preserve shortcut vs desktop-UI origin, backend-submitted/unverified vs verified/failure semantics, explicit deletion, no-speech omission and non-fatal persistence failure behavior; keep SQL and retention logic out of JavaScript.
+3. Merge PR #63 only with clear review threads and an unchanged green head, then close #59 as completed.
+4. Reconcile release-readiness documentation and execute any #44 runtime rows genuinely available through current tooling, saving evidence tied to an exact commit; mark unavailable physical/session validation `BLOCKED_EXTERNAL` rather than passing.
+5. Independently, add `Critical validation gate` to the active `main-protection` ruleset when administration access is available, then validate the live ruleset and close #42.
+6. Do **not** configure production signing/notarization credentials or publish a production release.
 
 ## Mandatory external gates
 
