@@ -5,6 +5,7 @@ use blcvoice_shortcuts::ShortcutDecision;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::history::{InvocationOrigin, finish_and_record};
 use crate::ipc::{CommandErrorDto, DesktopState, DictationReportDto};
 use crate::shortcut::ShortcutService;
 
@@ -193,9 +194,7 @@ fn spawn_finish<R: Runtime>(app: AppHandle<R>, session_id: SessionId) {
     tauri::async_runtime::spawn(async move {
         let worker_app = app.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
-            worker_app
-                .state::<DesktopState>()
-                .finish_dictation_session(session_id)
+            finish_and_record(&worker_app, session_id, InvocationOrigin::Shortcut)
         })
         .await;
 
