@@ -243,8 +243,8 @@ pub(crate) fn finish_and_record<R: Runtime>(
     result
 }
 
-#[tauri::command]
-pub async fn dictation_finish(
+#[tauri::command(rename = "dictation_finish")]
+pub async fn history_dictation_finish(
     app: tauri::AppHandle,
     session_id: u64,
 ) -> Result<DictationReportDto, CommandErrorDto> {
