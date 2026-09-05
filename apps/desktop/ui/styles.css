@@ -125,12 +125,19 @@ progress { display: block; width: 100%; height: 7px; border: 0; }
 .result-card p { margin: 8px 0 0; color: var(--muted); font-size: .82rem; }
 .result-stats { margin-top: 12px; }
 
-.diagnostic-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
+.history-list { display: grid; gap: 9px; margin-top: 13px; }
+.history-item { padding: 14px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-strong); }
+.history-item p { margin: 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.history-item-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.history-meta { color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.history-delete { flex: 0 0 auto; }
+
+.diagnostic-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
 .diagnostic-item { min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-strong); }
 .diagnostic-item span, .diagnostic-item strong, .diagnostic-item small { display: block; }
 .diagnostic-item span { margin-bottom: 6px; color: var(--muted); font-size: .69rem; font-weight: 690; }
 .diagnostic-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
-.diagnostic-item small { margin-top: 5px; color: var(--muted); font-size: .69rem; line-height: 1.35; }
+.diagnostic-item small { margin-top: 5px; color: var(--muted); font-size: .69rem; line-height: 1.35; overflow-wrap: anywhere; }
 .footer-note { margin: 18px 4px 0; color: var(--muted); font-size: .76rem; }
 [hidden] { display: none !important; }
 
@@ -145,6 +152,7 @@ progress { display: block; width: 100%; height: 7px; border: 0; }
   .device-details, .result-stats { grid-template-columns: 1fr; }
   .device-details > div, .result-stats > div { border-top: 1px solid var(--border); border-left: 0; }
   .device-details > div:first-child, .result-stats > div:first-child { border-top: 0; }
+  .history-item-footer { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) { .button, .dictation-button { transition: none; } }
