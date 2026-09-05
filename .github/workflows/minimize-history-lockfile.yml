@@ -1,0 +1,50 @@
+name: Minimize history lockfile diff
+
+on:
+  push:
+    branches:
+      - feat/desktop-history-wiring
+    paths:
+      - .github/workflows/minimize-history-lockfile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  minimize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch with main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/desktop-history-wiring
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Restore main lockfile and add only local desktop dependency edge
+        shell: bash
+        run: |
+          git checkout origin/main -- Cargo.lock
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('Cargo.lock')
+          text = path.read_text()
+          start = text.index('[[package]]\nname = "blcvoice-desktop"')
+          end = text.index('\n[[package]]', start + 1)
+          block = text[start:end]
+          if ' "blcvoice-storage",' in block:
+              raise SystemExit('desktop lockfile block already contains storage dependency')
+          anchor = ' "blcvoice-shortcuts",\n'
+          if block.count(anchor) != 1:
+              raise SystemExit(f'expected one desktop shortcuts anchor, found {block.count(anchor)}')
+          block = block.replace(anchor, anchor + ' "blcvoice-storage",\n', 1)
+          path.write_text(text[:start] + block + text[end:])
+          PY
+          cargo +stable metadata --locked --no-deps --format-version 1 >/dev/null
+      - name: Commit minimal lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git diff --cached --quiet && { echo "No lockfile change produced"; exit 1; }
+          git commit -m "chore: keep desktop history lockfile change minimal"
+          git push origin HEAD:feat/desktop-history-wiring
