@@ -20,37 +20,36 @@ jobs:
           ref: feat/desktop-history-wiring
           persist-credentials: true
       - name: Apply exact coordinator patch
-        shell: python
+        shell: bash
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path("apps/desktop/src-tauri/src/coordinator.rs")
           text = path.read_text()
           import_anchor = "use crate::ipc::{CommandErrorDto, DesktopState, DictationReportDto};\n"
-          import_replacement = (
-              "use crate::history::{InvocationOrigin, finish_and_record};\n"
-              + import_anchor
-          )
+          import_replacement = "use crate::history::{InvocationOrigin, finish_and_record};\n" + import_anchor
           if import_anchor not in text:
               raise SystemExit("expected coordinator import anchor not found")
           text = text.replace(import_anchor, import_replacement, 1)
 
           old = '''        let result = tauri::async_runtime::spawn_blocking(move || {
-            worker_app
-                .state::<DesktopState>()
-                .finish_dictation_session(session_id)
-        })
-        .await;
-'''
+              worker_app
+                  .state::<DesktopState>()
+                  .finish_dictation_session(session_id)
+          })
+          .await;
+          '''
           new = '''        let result = tauri::async_runtime::spawn_blocking(move || {
-            finish_and_record(&worker_app, session_id, InvocationOrigin::Shortcut)
-        })
-        .await;
-'''
+              finish_and_record(&worker_app, session_id, InvocationOrigin::Shortcut)
+          })
+          .await;
+          '''
           if old not in text:
               raise SystemExit("expected shortcut finish block not found")
           text = text.replace(old, new, 1)
           path.write_text(text)
+          PY
       - name: Format coordinator
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component rustfmt
