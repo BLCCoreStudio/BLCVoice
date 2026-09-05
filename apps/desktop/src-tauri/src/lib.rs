@@ -11,7 +11,7 @@ mod settings;
 mod shortcut;
 
 use coordinator::ShortcutDictationCoordinator;
-use history::{HistoryService, dictation_finish, history_delete, history_list, history_status};
+use history::{HistoryService, history_delete, history_dictation_finish, history_list, history_status};
 use ipc::{
     DesktopState, audio_input_discovery, desktop_status, dictation_cancel, dictation_start,
     dictation_start_configured, insertion_capability, microphone_test_cancel,
@@ -92,7 +92,7 @@ pub fn run() {
             microphone_test_cancel,
             dictation_start,
             dictation_start_configured,
-            dictation_finish,
+            history_dictation_finish,
             dictation_cancel,
             insertion_capability,
             settings_get,
