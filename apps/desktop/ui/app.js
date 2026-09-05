@@ -625,7 +625,7 @@ function renderHistory(entries) {
     const timestamp = new Date(entry.createdAtUnixMs).toLocaleString();
     const source = entry.invocationSource === "shortcut" ? "Shortcut" : "Desktop UI";
     const language = entry.detectedLanguage ? entry.detectedLanguage.toUpperCase() : "language unknown";
-    meta.textContent = `${timestamp} · x${source} · x${language} ·${distoryDeliveryLabel(entry.deliveryState)}`;
+    meta.textContent = `${timestamp} · ${source} · ${language} · ${historyDeliveryLabel(entry.deliveryState)}`;
     footer.append(meta);
 
     const remove = document.createElement("button");
