@@ -638,6 +638,7 @@ function renderHistory(entries) {
       remove.disabled = true;
       try {
         await invoke("history_delete", { id: entry.id });
+        state.historyBusy = false;
         await refreshHistory();
       } catch (error) {
         elements.historyMessage.textContent = commandErrorMessage(error);
