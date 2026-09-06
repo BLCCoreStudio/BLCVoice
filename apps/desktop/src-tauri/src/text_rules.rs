@@ -321,14 +321,16 @@ pub fn dictionary_save(
     aliases: Vec<String>,
     enabled: Option<bool>,
 ) -> Result<DictionaryEntry, String> {
-    global()?
+    let service = global().map_err(|error| error.to_string())?;
+    service
         .save_dictionary(id, term, aliases, enabled)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn dictionary_delete(id: u64) -> Result<bool, String> {
-    global()?
+    let service = global().map_err(|error| error.to_string())?;
+    service
         .delete_dictionary(id)
         .map_err(|error| error.to_string())
 }
@@ -341,14 +343,16 @@ pub fn replacement_save(
     enabled: Option<bool>,
     whole_word: Option<bool>,
 ) -> Result<ReplacementRule, String> {
-    global()?
+    let service = global().map_err(|error| error.to_string())?;
+    service
         .save_replacement(id, from, to, enabled, whole_word)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn replacement_delete(id: u64) -> Result<bool, String> {
-    global()?
+    let service = global().map_err(|error| error.to_string())?;
+    service
         .delete_replacement(id)
         .map_err(|error| error.to_string())
 }
@@ -452,7 +456,10 @@ fn normalize_list(values: &[String]) -> Vec<String> {
 
 fn write_document(path: &Path, document: &TextRulesDocument) -> Result<(), TextRulesError> {
     let parent = path.parent().ok_or_else(|| {
-        TextRulesError::new(format!("text-rules path {} has no parent directory", path.display()))
+        TextRulesError::new(format!(
+            "text-rules path {} has no parent directory",
+            path.display()
+        ))
     })?;
     fs::create_dir_all(parent).map_err(|error| {
         TextRulesError::new(format!(
