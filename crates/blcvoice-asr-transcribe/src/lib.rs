@@ -9,8 +9,9 @@ use blcvoice_asr::{
 };
 use transcribe_cpp::{
     Backend as NativeBackend, Error as NativeError, Feature as NativeFeature, Itn as NativeItn,
-    Model, ModelOptions, Pnc as NativePnc, RunOptions as NativeRunOptions, Session, SessionOptions,
-    Task as NativeTask, TimestampKind as NativeTimestampKind, Transcript as NativeTranscript,
+    Model, ModelOptions, Pnc as NativePnc, RunExtension, RunOptions as NativeRunOptions, Session,
+    SessionOptions, Task as NativeTask, TimestampKind as NativeTimestampKind,
+    Transcript as NativeTranscript, WhisperRunOptions,
 };
 
 pub const ENGINE_ID: &str = "transcribe.cpp";
@@ -198,6 +199,16 @@ fn build_run_options(options: &RecognitionOptions) -> Result<NativeRunOptions, R
             "language hint cannot be empty",
         ));
     }
+    if options
+        .initial_prompt
+        .as_deref()
+        .is_some_and(|prompt| prompt.trim().is_empty())
+    {
+        return Err(RecognitionError::new(
+            RecognitionErrorKind::InvalidRequest,
+            "initial prompt cannot be empty",
+        ));
+    }
 
     let (task, target_language) = match &options.task {
         RecognitionTask::Transcribe => (NativeTask::Transcribe, None),
@@ -212,6 +223,13 @@ fn build_run_options(options: &RecognitionOptions) -> Result<NativeRunOptions, R
         }
     };
 
+    let family = options.initial_prompt.as_ref().map(|prompt| {
+        RunExtension::Whisper(WhisperRunOptions {
+            initial_prompt: Some(prompt.clone()),
+            ..WhisperRunOptions::default()
+        })
+    });
+
     Ok(NativeRunOptions {
         task,
         timestamps: native_timestamp_kind(options.timestamps),
@@ -219,6 +237,7 @@ fn build_run_options(options: &RecognitionOptions) -> Result<NativeRunOptions, R
         itn: native_itn(options.inverse_text_normalization),
         language: options.language_hint.clone(),
         target_language,
+        family,
         ..NativeRunOptions::default()
     })
 }
@@ -403,6 +422,7 @@ mod tests {
         assert_eq!(mapped.pnc, NativePnc::Default);
         assert_eq!(mapped.itn, NativeItn::Default);
         assert_eq!(mapped.target_language, None);
+        assert_eq!(mapped.family, None);
     }
 
     #[test]
@@ -412,6 +432,7 @@ mod tests {
                 target_language: "en".to_owned(),
             },
             language_hint: Some("de".to_owned()),
+            initial_prompt: None,
             timestamps: TimestampGranularity::Word,
             punctuation: FeaturePreference::Enabled,
             inverse_text_normalization: FeaturePreference::Disabled,
@@ -427,6 +448,24 @@ mod tests {
     }
 
     #[test]
+    fn dictionary_prompt_maps_to_whisper_run_extension() {
+        let options = RecognitionOptions {
+            initial_prompt: Some("BLCVoice, Yapay Zeka".to_owned()),
+            ..RecognitionOptions::default()
+        };
+        let mapped = build_run_options(&options).expect("valid prompt");
+        match mapped.family {
+            Some(RunExtension::Whisper(whisper)) => {
+                assert_eq!(
+                    whisper.initial_prompt.as_deref(),
+                    Some("BLCVoice, Yapay Zeka")
+                );
+            }
+            other => panic!("expected Whisper run extension, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn blank_language_requests_are_rejected_before_ffi() {
         let options = RecognitionOptions {
             language_hint: Some("  ".to_owned()),
@@ -435,6 +474,20 @@ mod tests {
         assert_eq!(
             build_run_options(&options)
                 .expect_err("blank language must fail")
+                .kind(),
+            RecognitionErrorKind::InvalidRequest
+        );
+    }
+
+    #[test]
+    fn blank_prompts_are_rejected_before_ffi() {
+        let options = RecognitionOptions {
+            initial_prompt: Some("  ".to_owned()),
+            ..RecognitionOptions::default()
+        };
+        assert_eq!(
+            build_run_options(&options)
+                .expect_err("blank prompt must fail")
                 .kind(),
             RecognitionErrorKind::InvalidRequest
         );
