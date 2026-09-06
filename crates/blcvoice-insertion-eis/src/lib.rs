@@ -39,6 +39,7 @@ const fn capability_for_mode(mode: SubmissionMode) -> InsertionCapability {
     InsertionCapability::new(backend, InsertionAuthorization::XdgRemoteDesktop)
 }
 
+#[cfg(any(not(target_os = "linux"), test))]
 const fn wayland_eis_capability() -> InsertionCapability {
     capability_for_mode(SubmissionMode::Text)
 }
