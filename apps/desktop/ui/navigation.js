@@ -1,5 +1,10 @@
 "use strict";
 
+const layoutStylesheet = document.createElement("link");
+layoutStylesheet.rel = "stylesheet";
+layoutStylesheet.href = "layout.css";
+document.head.append(layoutStylesheet);
+
 const navItems = Array.from(document.querySelectorAll("[data-view-target]"));
 const views = Array.from(document.querySelectorAll("[data-view]"));
 const VIEW_STORAGE_KEY = "blcvoice.desktop.view";
