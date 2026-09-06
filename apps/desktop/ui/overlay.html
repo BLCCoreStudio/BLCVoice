@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="overlay.css" />
   </head>
   <body>
-    <main id="overlay-shell" class="overlay-shell idle" aria-live="polite" aria-atomic="true">
+    <main id="overlay-shell" class="overlay-shell idle" data-tauri-drag-region aria-live="polite" aria-atomic="true">
       <div class="waveform" aria-hidden="true">
         <span></span>
         <span></span>
@@ -15,18 +15,15 @@
         <span></span>
         <span></span>
         <span></span>
-        <span></span>
       </div>
 
-      <div class="copy">
-        <div class="title-row">
-          <strong id="overlay-title">BLCVoice</strong>
-          <span id="recording-timer" class="timer" hidden>00:00</span>
-        </div>
+      <div class="status-line">
+        <strong id="overlay-title">BLCVoice</strong>
         <span id="overlay-message">Ready</span>
       </div>
 
-      <span id="shortcut-hint" class="shortcut-hint">Ctrl Shift Space</span>
+      <span id="recording-timer" class="timer" hidden>00:00</span>
+      <span id="shortcut-hint" class="shortcut-hint">Ctrl⇧Space</span>
     </main>
     <script src="overlay.js"></script>
   </body>
