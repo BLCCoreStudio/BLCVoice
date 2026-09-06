@@ -50,6 +50,7 @@ struct ShortcutServiceState {
     selection_error: Option<ShortcutCapabilityError>,
     registration_state: ShortcutRegistrationState,
     registration_error: Option<String>,
+    bound_trigger_description: Option<String>,
     controller: ShortcutController,
 }
 
@@ -78,6 +79,7 @@ impl ShortcutService {
                 selection_error,
                 registration_state,
                 registration_error: None,
+                bound_trigger_description: None,
                 controller: ShortcutController::default(),
             }),
         }
@@ -92,14 +94,16 @@ impl ShortcutService {
         if state.backend.is_some() {
             state.registration_state = ShortcutRegistrationState::Registering;
             state.registration_error = None;
+            state.bound_trigger_description = None;
         }
     }
 
-    fn mark_registered(&self) {
+    fn mark_registered(&self, trigger_description: Option<String>) {
         let mut state = self.lock_state();
         if state.backend.is_some() {
             state.registration_state = ShortcutRegistrationState::Registered;
             state.registration_error = None;
+            state.bound_trigger_description = trigger_description;
         }
     }
 
@@ -107,6 +111,7 @@ impl ShortcutService {
         let mut state = self.lock_state();
         state.registration_state = ShortcutRegistrationState::Failed;
         state.registration_error = Some(message.into());
+        state.bound_trigger_description = None;
         state.controller.force_idle();
     }
 
@@ -141,7 +146,7 @@ pub struct ShortcutCapabilityDto {
     linux_display_server: Option<String>,
     selected_backend: Option<String>,
     registration_implemented: bool,
-    registration_state: &'static str,
+    registration_state: String,
     registration_error: Option<String>,
     selection_error: Option<ShortcutCapabilityErrorDto>,
 }
@@ -203,7 +208,9 @@ fn install_native_shortcut<R: Runtime>(app: &mut App<R>) {
         .build();
 
     match app.handle().plugin(plugin) {
-        Ok(()) => app.state::<ShortcutService>().mark_registered(),
+        Ok(()) => app
+            .state::<ShortcutService>()
+            .mark_registered(Some(DEFAULT_DICTATION_TRIGGER.to_owned())),
         Err(error) => app
             .state::<ShortcutService>()
             .mark_failed(format!("global shortcut registration failed: {error}")),
@@ -249,13 +256,17 @@ async fn run_portal_shortcut<R: Runtime>(app: AppHandle<R>) -> Result<(), String
         .response()
         .map_err(|error| format!("XDG global shortcut binding was not accepted: {error}"))?;
 
-    if !response
+    let bound_shortcut = response
         .shortcuts()
         .iter()
-        .any(|shortcut| shortcut.id() == DICTATION_SHORTCUT_ID)
-    {
-        return Err("XDG portal response did not contain the BLCVoice shortcut".to_owned());
-    }
+        .find(|shortcut| shortcut.id() == DICTATION_SHORTCUT_ID)
+        .ok_or_else(|| "XDG portal response did not contain the BLCVoice shortcut".to_owned())?;
+    let trigger_description = bound_shortcut.trigger_description().trim();
+    let trigger_description = if trigger_description.is_empty() {
+        None
+    } else {
+        Some(trigger_description.to_owned())
+    };
 
     let activated = portal
         .receive_activated()
@@ -272,7 +283,8 @@ async fn run_portal_shortcut<R: Runtime>(app: AppHandle<R>) -> Result<(), String
             (event.shortcut_id() == DICTATION_SHORTCUT_ID).then_some(ShortcutPhase::Released)
         });
 
-    app.state::<ShortcutService>().mark_registered();
+    app.state::<ShortcutService>()
+        .mark_registered(trigger_description);
 
     let events = stream::select(activated, deactivated);
     futures_util::pin_mut!(events);
@@ -306,13 +318,20 @@ fn shortcut_capability_for(state: &ShortcutServiceState) -> ShortcutCapabilityDt
         DesktopPlatform::Linux => Some(state.environment.linux_display_server().to_string()),
         DesktopPlatform::Windows | DesktopPlatform::MacOs | DesktopPlatform::Other => None,
     };
+    let registration_state = match state.registration_state {
+        ShortcutRegistrationState::Registered => match state.bound_trigger_description.as_deref() {
+            Some(trigger) => format!("registered · {trigger}"),
+            None => "registered · portal did not report a trigger".to_owned(),
+        },
+        other => other.as_str().to_owned(),
+    };
 
     ShortcutCapabilityDto {
         platform: platform.to_string(),
         linux_display_server,
         selected_backend: state.backend.map(|backend| backend.to_string()),
         registration_implemented: state.backend.is_some(),
-        registration_state: state.registration_state.as_str(),
+        registration_state,
         registration_error: state.registration_error.clone(),
         selection_error: state
             .selection_error
@@ -417,7 +436,7 @@ mod tests {
             ShortcutDecision::Ignore
         );
 
-        service.mark_registered();
+        service.mark_registered(Some("Ctrl+Shift+Space".to_owned()));
         assert_eq!(
             service.handle_phase(ShortcutPhase::Pressed),
             ShortcutDecision::StartDictation
@@ -438,7 +457,7 @@ mod tests {
             DesktopPlatform::Windows,
             LinuxDisplayServer::Unknown,
         ));
-        service.mark_registered();
+        service.mark_registered(Some(DEFAULT_DICTATION_TRIGGER.to_owned()));
         assert_eq!(
             service.handle_phase(ShortcutPhase::Pressed),
             ShortcutDecision::StartDictation
@@ -454,6 +473,20 @@ mod tests {
         assert_eq!(
             service.handle_phase(ShortcutPhase::Released),
             ShortcutDecision::Ignore
+        );
+    }
+
+    #[test]
+    fn registered_capability_reports_the_actual_trigger_description() {
+        let service = ShortcutService::for_environment(ShortcutEnvironment::new(
+            DesktopPlatform::Linux,
+            LinuxDisplayServer::Wayland,
+        ));
+        service.mark_registered(Some("Ctrl+Alt+Space".to_owned()));
+
+        assert_eq!(
+            service.capability().registration_state,
+            "registered · Ctrl+Alt+Space"
         );
     }
 }
