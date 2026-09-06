@@ -9,6 +9,8 @@ use blcvoice_insertion_native::{NativeInserter, NativeInsertionOptions};
 use blcvoice_insertion_x11::{X11Inserter, X11Options};
 use blcvoice_platform::{DesktopEnvironment, current_desktop_environment};
 
+use crate::text_rules::apply_text_rules;
+
 struct InsertionState {
     inserter: Option<Box<dyn TextInserter>>,
     wayland_restore_token: Option<String>,
@@ -72,6 +74,7 @@ impl DesktopInsertionService {
     }
 
     pub fn insert_text(&self, text: &str) -> Result<InsertionReceipt, InsertionError> {
+        let processed_text = apply_text_rules(text);
         let capability = self.capability()?;
         let mut state = self.lock_state();
         if state.inserter.is_none() {
@@ -82,7 +85,7 @@ impl DesktopInsertionService {
             .inserter
             .as_mut()
             .expect("inserter must exist after connection")
-            .insert_text(text);
+            .insert_text(&processed_text);
 
         if result.as_ref().is_err_and(|error| {
             matches!(
