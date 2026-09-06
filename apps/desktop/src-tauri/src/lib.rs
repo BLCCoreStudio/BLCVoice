@@ -9,6 +9,7 @@ mod ipc;
 mod models;
 mod settings;
 mod shortcut;
+mod text_rules;
 
 use coordinator::ShortcutDictationCoordinator;
 use history::{
@@ -24,6 +25,9 @@ use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{App, AppHandle, Manager, Runtime, WindowEvent};
+use text_rules::{
+    dictionary_delete, dictionary_save, replacement_delete, replacement_save, text_rules_snapshot,
+};
 
 #[tauri::command]
 fn core_status() -> String {
@@ -69,6 +73,7 @@ pub fn run() {
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
+            text_rules::initialize(config_dir.clone()).map_err(std::io::Error::other)?;
             let desktop = DesktopState::production(config_dir, data_dir.clone())
                 .map_err(std::io::Error::other)?;
             app.manage(HistoryService::production(data_dir));
@@ -108,6 +113,11 @@ pub fn run() {
             history_list,
             history_delete,
             shortcut_capability,
+            text_rules_snapshot,
+            dictionary_save,
+            dictionary_delete,
+            replacement_save,
+            replacement_delete,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run BLCVoice desktop shell");
