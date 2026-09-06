@@ -188,7 +188,9 @@ impl TextRulesService {
                     .dictionary
                     .iter_mut()
                     .find(|entry| entry.id == id)
-                    .ok_or_else(|| TextRulesError::new(format!("dictionary entry {id} does not exist")))?;
+                    .ok_or_else(|| {
+                        TextRulesError::new(format!("dictionary entry {id} does not exist"))
+                    })?;
                 entry.term = term;
                 entry.aliases = aliases;
                 entry.enabled = enabled.unwrap_or(entry.enabled);
@@ -230,7 +232,9 @@ impl TextRulesService {
                     .replacements
                     .iter_mut()
                     .find(|rule| rule.id == id)
-                    .ok_or_else(|| TextRulesError::new(format!("replacement rule {id} does not exist")))?;
+                    .ok_or_else(|| {
+                        TextRulesError::new(format!("replacement rule {id} does not exist"))
+                    })?;
                 rule.from = from;
                 rule.to = to;
                 rule.enabled = enabled.unwrap_or(rule.enabled);
@@ -446,7 +450,11 @@ fn normalize_list(values: &[String]) -> Vec<String> {
     let mut normalized = Vec::new();
     for value in values {
         let value = value.trim();
-        if value.is_empty() || normalized.iter().any(|existing| existing == value) {
+        if value.is_empty()
+            || normalized
+                .iter()
+                .any(|existing: &String| existing.as_str() == value)
+        {
             continue;
         }
         normalized.push(value.to_owned());
@@ -593,12 +601,7 @@ mod tests {
         let directory = temporary_directory("round-trip");
         let service = TextRulesService::open(&directory).expect("service must open");
         service
-            .save_dictionary(
-                None,
-                "OpenAI".to_owned(),
-                vec!["open ai".to_owned()],
-                None,
-            )
+            .save_dictionary(None, "OpenAI".to_owned(), vec!["open ai".to_owned()], None)
             .expect("dictionary entry must save");
         service
             .save_replacement(
