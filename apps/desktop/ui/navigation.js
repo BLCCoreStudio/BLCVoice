@@ -24,7 +24,7 @@ function activateView(name, { remember = true } = {}) {
     else item.removeAttribute("aria-current");
   }
 
-  document.querySelector(".workspace")?.scrollTo({ top: 0, behavior: "instant" });
+  document.querySelector(".workspace")?.scrollTo({ top: 0, behavior: "auto" });
   if (remember) {
     try {
       window.localStorage.setItem(VIEW_STORAGE_KEY, target.dataset.view || "home");
