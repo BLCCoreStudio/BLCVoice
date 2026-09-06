@@ -8,6 +8,12 @@ use blcvoice_insertion::{
 #[cfg(any(target_os = "linux", test))]
 const EI_TEXT_MAX_UTF8_BYTES: usize = 254;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubmissionMode {
+    Text,
+    ClipboardKeyboard,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WaylandEisOptions {
     restore_token: Option<String>,
@@ -25,24 +31,29 @@ impl WaylandEisOptions {
     }
 }
 
+const fn capability_for_mode(mode: SubmissionMode) -> InsertionCapability {
+    let backend = match mode {
+        SubmissionMode::Text => InsertionBackend::XdgRemoteDesktopEis,
+        SubmissionMode::ClipboardKeyboard => InsertionBackend::XdgRemoteDesktopEisClipboard,
+    };
+    InsertionCapability::new(backend, InsertionAuthorization::XdgRemoteDesktop)
+}
+
 const fn wayland_eis_capability() -> InsertionCapability {
-    InsertionCapability::new(
-        InsertionBackend::XdgRemoteDesktopEis,
-        InsertionAuthorization::XdgRemoteDesktop,
-    )
+    capability_for_mode(SubmissionMode::Text)
 }
 
 fn validate_text(text: &str) -> Result<(), InsertionError> {
     if text.is_empty() {
         return Err(InsertionError::new(
             InsertionErrorKind::InvalidText,
-            "cannot submit empty text through ei_text.utf8",
+            "cannot submit empty text through the Wayland insertion backend",
         ));
     }
     if text.contains('\0') {
         return Err(InsertionError::new(
             InsertionErrorKind::InvalidText,
-            "text contains a NUL byte, which ei_text.utf8 cannot encode",
+            "text contains a NUL byte, which the Wayland insertion backend cannot encode safely",
         ));
     }
     Ok(())
@@ -87,13 +98,16 @@ mod platform {
         event::{DeviceCapability, EiEvent},
     };
     use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+    use wl_clipboard_rs::copy::{MimeType as ClipboardMimeType, Options as ClipboardOptions, Source};
 
     use super::{
-        InsertionBackend, InsertionError, InsertionErrorKind, InsertionReceipt, TextInserter,
-        WaylandEisOptions, utf8_chunks, validate_text, wayland_eis_capability,
+        InsertionBackend, InsertionError, InsertionErrorKind, InsertionReceipt, SubmissionMode,
+        TextInserter, WaylandEisOptions, capability_for_mode, utf8_chunks, validate_text,
     };
 
     const DEVICE_READY_TIMEOUT: Duration = Duration::from_secs(5);
+    const KEY_LEFTCTRL: u32 = 29;
+    const KEY_V: u32 = 47;
 
     enum WorkerCommand {
         Insert {
@@ -101,6 +115,11 @@ mod platform {
             reply: mpsc::SyncSender<Result<InsertionReceipt, InsertionError>>,
         },
         Shutdown,
+    }
+
+    struct ReadyState {
+        restore_token: Option<String>,
+        mode: SubmissionMode,
     }
 
     struct DeviceSlot {
@@ -124,10 +143,14 @@ mod platform {
             }
         }
 
-        fn has_resumed_text_device(&self) -> bool {
-            self.devices
-                .iter()
-                .any(|slot| slot.resumed && slot.device.has_capability(DeviceCapability::Text))
+        fn available_mode(&self) -> Option<SubmissionMode> {
+            if self.text_device_index().is_some() {
+                Some(SubmissionMode::Text)
+            } else if self.keyboard_device_index().is_some() {
+                Some(SubmissionMode::ClipboardKeyboard)
+            } else {
+                None
+            }
         }
 
         fn handle_event(
@@ -147,7 +170,9 @@ mod platform {
                         .seat
                         .bind_capabilities(DeviceCapability::Keyboard | DeviceCapability::Text);
                     context.flush().map_err(|error| {
-                        backend_failure(format!("failed to bind EIS text capabilities: {error}"))
+                        backend_failure(format!(
+                            "failed to bind EIS keyboard/text capabilities: {error}"
+                        ))
                     })?;
                 }
                 EiEvent::DeviceAdded(event) => {
@@ -202,6 +227,12 @@ mod platform {
                 .position(|slot| slot.resumed && slot.device.has_capability(DeviceCapability::Text))
         }
 
+        fn keyboard_device_index(&self) -> Option<usize> {
+            self.devices.iter().position(|slot| {
+                slot.resumed && slot.device.has_capability(DeviceCapability::Keyboard)
+            })
+        }
+
         fn ensure_emulating(&mut self, index: usize, device: &reis::event::Device) {
             if self.devices[index].emulating {
                 return;
@@ -220,12 +251,25 @@ mod platform {
         ) -> Result<InsertionReceipt, InsertionError> {
             validate_text(text)?;
 
-            let index = self.text_device_index().ok_or_else(|| {
-                InsertionError::new(
-                    InsertionErrorKind::BackendUnavailable,
-                    "no resumed EIS device exposes the ei_text interface",
-                )
-            })?;
+            if let Some(index) = self.text_device_index() {
+                return self.insert_ei_text(context, text, index);
+            }
+            if let Some(index) = self.keyboard_device_index() {
+                return self.insert_clipboard_keyboard(context, text, index);
+            }
+
+            Err(InsertionError::new(
+                InsertionErrorKind::BackendUnavailable,
+                "the compositor no longer exposes a resumed EIS text or keyboard device",
+            ))
+        }
+
+        fn insert_ei_text(
+            &mut self,
+            context: &ei::Context,
+            text: &str,
+            index: usize,
+        ) -> Result<InsertionReceipt, InsertionError> {
             let device = self.devices[index].device.clone();
             self.ensure_emulating(index, &device);
 
@@ -264,11 +308,67 @@ mod platform {
                 submitted,
             ))
         }
+
+        fn insert_clipboard_keyboard(
+            &mut self,
+            context: &ei::Context,
+            text: &str,
+            index: usize,
+        ) -> Result<InsertionReceipt, InsertionError> {
+            ClipboardOptions::new()
+                .copy(Source::Bytes(text.as_bytes().into()), ClipboardMimeType::Text)
+                .map_err(|error| {
+                    InsertionError::new(
+                        InsertionErrorKind::BackendUnavailable,
+                        format!(
+                            "the compositor exposes EIS keyboard input but no ei_text device, and the native Wayland clipboard fallback could not be prepared: {error}"
+                        ),
+                    )
+                })?;
+
+            let device = self.devices[index].device.clone();
+            self.ensure_emulating(index, &device);
+            let keyboard = device.interface::<ei::Keyboard>().ok_or_else(|| {
+                InsertionError::new(
+                    InsertionErrorKind::BackendUnavailable,
+                    "the selected EIS device no longer exposes a keyboard interface",
+                )
+            })?;
+
+            keyboard.key(KEY_LEFTCTRL, ei::keyboard::KeyState::Press);
+            device
+                .device()
+                .frame(self.last_serial, monotonic_microseconds());
+            keyboard.key(KEY_V, ei::keyboard::KeyState::Press);
+            device
+                .device()
+                .frame(self.last_serial, monotonic_microseconds());
+            keyboard.key(KEY_V, ei::keyboard::KeyState::Released);
+            device
+                .device()
+                .frame(self.last_serial, monotonic_microseconds());
+            keyboard.key(KEY_LEFTCTRL, ei::keyboard::KeyState::Released);
+            device
+                .device()
+                .frame(self.last_serial, monotonic_microseconds());
+
+            context.flush().map_err(|error| {
+                backend_failure(format!(
+                    "failed to submit the EIS clipboard-paste shortcut: {error}"
+                ))
+            })?;
+
+            Ok(InsertionReceipt::complete(
+                InsertionBackend::XdgRemoteDesktopEisClipboard,
+                text.len(),
+            ))
+        }
     }
 
     pub struct WaylandEisInserter {
         command_tx: UnboundedSender<WorkerCommand>,
         restore_token: Option<String>,
+        mode: SubmissionMode,
         worker: Option<JoinHandle<()>>,
     }
 
@@ -285,9 +385,10 @@ mod platform {
                 })?;
 
             match ready_rx.recv() {
-                Ok(Ok(restore_token)) => Ok(Self {
+                Ok(Ok(ready)) => Ok(Self {
                     command_tx,
-                    restore_token,
+                    restore_token: ready.restore_token,
+                    mode: ready.mode,
                     worker: Some(worker),
                 }),
                 Ok(Err(error)) => {
@@ -311,7 +412,7 @@ mod platform {
 
     impl TextInserter for WaylandEisInserter {
         fn capability(&self) -> super::InsertionCapability {
-            wayland_eis_capability()
+            capability_for_mode(self.mode)
         }
 
         fn insert_text(&mut self, text: &str) -> Result<InsertionReceipt, InsertionError> {
@@ -350,7 +451,7 @@ mod platform {
     fn worker_main(
         options: WaylandEisOptions,
         command_rx: UnboundedReceiver<WorkerCommand>,
-        ready_tx: mpsc::SyncSender<Result<Option<String>, InsertionError>>,
+        ready_tx: mpsc::SyncSender<Result<ReadyState, InsertionError>>,
     ) {
         let runtime = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -376,7 +477,7 @@ mod platform {
     async fn run_worker(
         options: WaylandEisOptions,
         mut command_rx: UnboundedReceiver<WorkerCommand>,
-        ready_tx: mpsc::SyncSender<Result<Option<String>, InsertionError>>,
+        ready_tx: mpsc::SyncSender<Result<ReadyState, InsertionError>>,
     ) -> Result<(), InsertionError> {
         let remote_desktop = RemoteDesktop::new().await.map_err(|error| {
             backend_failure(format!(
@@ -441,15 +542,18 @@ mod platform {
             .map_err(|error| backend_failure(format!("EIS sender handshake failed: {error}")))?;
 
         let mut state = EiState::new();
-        tokio::time::timeout(DEVICE_READY_TIMEOUT, async {
-            while !state.has_resumed_text_device() {
+        let mode = tokio::time::timeout(DEVICE_READY_TIMEOUT, async {
+            loop {
+                if let Some(mode) = state.available_mode() {
+                    break Ok(mode);
+                }
                 let event = events
                     .next()
                     .await
                     .ok_or_else(|| {
                         InsertionError::new(
                             InsertionErrorKind::BackendUnavailable,
-                            "the EIS event stream closed before a text device became available",
+                            "the EIS event stream closed before a usable input device became available",
                         )
                     })?
                     .map_err(|error| {
@@ -457,19 +561,23 @@ mod platform {
                     })?;
                 state.handle_event(event, &context)?;
             }
-            Ok::<(), InsertionError>(())
         })
         .await
         .map_err(|_| {
             InsertionError::new(
                 InsertionErrorKind::BackendUnavailable,
-                "the compositor did not expose a resumed ei_text device within five seconds",
+                "the compositor did not expose a resumed EIS text or keyboard device within five seconds",
             )
         })??;
 
-        ready_tx.send(Ok(restore_token)).map_err(|_| {
-            backend_failure("the EIS owner disappeared before initialization completed")
-        })?;
+        ready_tx
+            .send(Ok(ReadyState {
+                restore_token,
+                mode,
+            }))
+            .map_err(|_| {
+                backend_failure("the EIS owner disappeared before initialization completed")
+            })?;
 
         loop {
             tokio::select! {
@@ -483,15 +591,15 @@ mod platform {
                 }
                 event = events.next() => {
                     let event = event
-              .ok_or_else(|| {
-                  InsertionError::new(
-                      InsertionErrorKind::BackendUnavailable,
-                      "the EIS event stream closed",
-                  )
-              })?
-              .map_err(|error| {
-                  backend_failure(format!("failed to read an EIS event: {error}"))
-              })?;
+                        .ok_or_else(|| {
+                            InsertionError::new(
+                                InsertionErrorKind::BackendUnavailable,
+                                "the EIS event stream closed",
+                            )
+                        })?
+                        .map_err(|error| {
+                            backend_failure(format!("failed to read an EIS event: {error}"))
+                        })?;
                     state.handle_event(event, &context)?;
                 }
             }
@@ -587,6 +695,20 @@ mod tests {
     fn capability_is_explicitly_wayland_portal_eis() {
         let capability = wayland_eis_capability();
         assert_eq!(capability.backend(), InsertionBackend::XdgRemoteDesktopEis);
+        assert_eq!(
+            capability.authorization(),
+            InsertionAuthorization::XdgRemoteDesktop
+        );
+        assert!(!capability.semantic_delivery_verifiable());
+    }
+
+    #[test]
+    fn clipboard_keyboard_fallback_has_distinct_backend_identity() {
+        let capability = capability_for_mode(SubmissionMode::ClipboardKeyboard);
+        assert_eq!(
+            capability.backend(),
+            InsertionBackend::XdgRemoteDesktopEisClipboard
+        );
         assert_eq!(
             capability.authorization(),
             InsertionAuthorization::XdgRemoteDesktop
