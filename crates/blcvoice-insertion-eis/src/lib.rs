@@ -98,7 +98,9 @@ mod platform {
         event::{DeviceCapability, EiEvent},
     };
     use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-    use wl_clipboard_rs::copy::{MimeType as ClipboardMimeType, Options as ClipboardOptions, Source};
+    use wl_clipboard_rs::copy::{
+        MimeType as ClipboardMimeType, Options as ClipboardOptions, Source,
+    };
 
     use super::{
         InsertionBackend, InsertionError, InsertionErrorKind, InsertionReceipt, SubmissionMode,
