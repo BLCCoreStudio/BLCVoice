@@ -217,8 +217,8 @@
     renderReplacements();
   }
 
-  async function refresh() {
-    if (!invokeCommand || state.busy) return;
+  async function refresh({ force = false } = {}) {
+    if (!invokeCommand || (state.busy && !force)) return;
     elements.refresh.disabled = true;
     try {
       const snapshot = await invokeCommand("text_rules_snapshot");
@@ -247,7 +247,7 @@
         enabled: entry.enabled ?? true,
       });
       resetDictionaryForm();
-      await refresh();
+      await refresh({ force: true });
     } catch (error) {
       setMessage(errorMessage(error), true);
     } finally {
@@ -262,7 +262,7 @@
     try {
       await invokeCommand("dictionary_delete", { id });
       resetDictionaryForm();
-      await refresh();
+      await refresh({ force: true });
     } catch (error) {
       setMessage(errorMessage(error), true);
     } finally {
@@ -284,7 +284,7 @@
         wholeWord: rule.wholeWord ?? true,
       });
       resetReplacementForm();
-      await refresh();
+      await refresh({ force: true });
     } catch (error) {
       setMessage(errorMessage(error), true);
     } finally {
@@ -299,7 +299,7 @@
     try {
       await invokeCommand("replacement_delete", { id });
       resetReplacementForm();
-      await refresh();
+      await refresh({ force: true });
     } catch (error) {
       setMessage(errorMessage(error), true);
     } finally {
