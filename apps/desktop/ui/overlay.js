@@ -11,12 +11,16 @@ const message = document.getElementById("overlay-message");
 const shortcutHint = document.getElementById("shortcut-hint");
 const recordingTimer = document.getElementById("recording-timer");
 
+const POSITION_STORAGE_KEY = "blcvoice.overlay.position.v1";
+
 let lifecycleGeneration = 0;
 let unlisten = null;
+let unlistenMoved = null;
 let timerId = null;
 let recordingStartedAt = null;
+let positioned = false;
 
-function truncate(text, max = 78) {
+function truncate(text, max = 28) {
   if (typeof text !== "string") return "";
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized;
@@ -50,27 +54,54 @@ function startTimer() {
 }
 
 function render(label, detail, kind, options = {}) {
-  const { showShortcut = true, showTimer = false } = options;
+  const { showShortcut = false, showTimer = false } = options;
   title.textContent = label;
-  message.textContent = detail;
+  message.textContent = detail || "";
+  message.hidden = !detail;
   shell.className = `overlay-shell ${kind}`;
   shortcutHint.hidden = !showShortcut;
   if (!showTimer) recordingTimer.hidden = true;
 }
 
-async function positionNearLeftEdge() {
-  if (!overlayWindow || !tauriWindow?.currentMonitor || !tauriWindow?.LogicalPosition) return;
+function loadSavedPosition() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(POSITION_STORAGE_KEY) || "null");
+    if (!parsed || !Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function positionInitially() {
+  if (positioned || !overlayWindow) return;
+
+  const saved = loadSavedPosition();
+  if (saved && tauriWindow?.PhysicalPosition) {
+    try {
+      await overlayWindow.setPosition(
+        new tauriWindow.PhysicalPosition(Math.round(saved.x), Math.round(saved.y)),
+      );
+      positioned = true;
+      return;
+    } catch {
+      // Fall through to the default left-edge position.
+    }
+  }
+
+  if (!tauriWindow?.currentMonitor || !tauriWindow?.LogicalPosition) return;
   try {
     const monitor = await tauriWindow.currentMonitor();
     if (!monitor) return;
 
     const scale = monitor.scaleFactor || 1;
-    const logicalX = monitor.position.x / scale + 22;
+    const logicalX = monitor.position.x / scale + 18;
     const logicalHeight = monitor.size.height / scale;
-    const logicalY = monitor.position.y / scale + Math.max(22, (logicalHeight - 88) / 2);
+    const logicalY = monitor.position.y / scale + Math.max(18, (logicalHeight - 52) * 0.45);
     await overlayWindow.setPosition(
       new tauriWindow.LogicalPosition(Math.round(logicalX), Math.round(logicalY)),
     );
+    positioned = true;
   } catch {
     // Positioning is cosmetic. Never let it interfere with dictation.
   }
@@ -79,7 +110,7 @@ async function positionNearLeftEdge() {
 async function showOverlay() {
   if (!overlayWindow) return;
   try {
-    await positionNearLeftEdge();
+    await positionInitially();
     await overlayWindow.show();
   } catch {
     // The overlay is advisory UI; a visibility failure must never affect dictation.
@@ -104,12 +135,12 @@ function applyLifecycle(payload) {
   switch (payload.state) {
     case "starting":
       stopTimer();
-      render("Preparing", "Loading the selected local model…", "working", { showShortcut: false });
+      render("Preparing", "Loading model", "working");
       void showOverlay();
       break;
     case "recording":
       startTimer();
-      render("Listening", "Speak naturally · press the shortcut again to stop", "recording", {
+      render("Listening", "Speak", "recording", {
         showShortcut: true,
         showTimer: true,
       });
@@ -118,43 +149,57 @@ function applyLifecycle(payload) {
       break;
     case "finishing":
       stopTimer();
-      render("Transcribing", "Processing your speech locally…", "working", { showShortcut: false });
+      render("Transcribing", "Local", "working");
       void showOverlay();
       break;
     case "completed": {
       stopTimer();
       const preview = truncate(payload.text);
-      render("Sent ✓", preview || "Transcript submitted to the focused app", "success", {
-        showShortcut: false,
-      });
+      render("Sent ✓", preview, "success");
       void showOverlay();
-      void hideOverlay(generation, 1700);
+      void hideOverlay(generation, 1250);
       break;
     }
     case "noSpeech":
       stopTimer();
-      render("No speech", "Nothing was inserted", "idle", { showShortcut: false });
+      render("No speech", "Nothing sent", "idle");
       void showOverlay();
-      void hideOverlay(generation, 1500);
+      void hideOverlay(generation, 1200);
       break;
-    case "failed": {
+    case "failed":
       stopTimer();
-      const recovered = truncate(payload.recoverableText);
-      const detail = recovered
-        ? `Text recovered: ${recovered}`
-        : payload.message || "Open BLCVoice for diagnostics";
-      render("Not sent", detail, "failed", { showShortcut: false });
+      render(
+        "Not sent",
+        payload.recoverableText ? "Text recovered" : "Open BLCVoice",
+        "failed",
+      );
       void showOverlay();
-      void hideOverlay(generation, recovered ? 4200 : 3200);
+      void hideOverlay(generation, 2600);
       break;
-    }
     default:
       break;
   }
 }
 
+async function watchPosition() {
+  if (!overlayWindow?.onMoved) return;
+  try {
+    unlistenMoved = await overlayWindow.onMoved(({ payload }) => {
+      if (!payload || !Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
+      window.localStorage.setItem(
+        POSITION_STORAGE_KEY,
+        JSON.stringify({ x: payload.x, y: payload.y }),
+      );
+      positioned = true;
+    });
+  } catch {
+    unlistenMoved = null;
+  }
+}
+
 async function bootstrap() {
   if (!listen || !overlayWindow) return;
+  await watchPosition();
   try {
     unlisten = await listen("blcvoice://dictation-lifecycle", (event) => {
       applyLifecycle(event.payload);
@@ -169,6 +214,10 @@ window.addEventListener("beforeunload", () => {
   if (unlisten) {
     unlisten();
     unlisten = null;
+  }
+  if (unlistenMoved) {
+    unlistenMoved();
+    unlistenMoved = null;
   }
 });
 
