@@ -5,6 +5,11 @@ layoutStylesheet.rel = "stylesheet";
 layoutStylesheet.href = "layout.css";
 document.head.append(layoutStylesheet);
 
+const historyStylesheet = document.createElement("link");
+historyStylesheet.rel = "stylesheet";
+historyStylesheet.href = "history-plus.css";
+document.head.append(historyStylesheet);
+
 const navItems = Array.from(document.querySelectorAll("[data-view-target]"));
 const views = Array.from(document.querySelectorAll("[data-view]"));
 const VIEW_STORAGE_KEY = "blcvoice.desktop.view";
@@ -46,3 +51,8 @@ try {
 }
 
 activateView(initialView, { remember: false });
+
+const historyScript = document.createElement("script");
+historyScript.src = "history-plus.js";
+historyScript.async = false;
+document.head.append(historyScript);
