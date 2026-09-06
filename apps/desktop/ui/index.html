@@ -7,180 +7,190 @@
     <meta name="description" content="BLCVoice private local desktop dictation" />
     <title>BLCVoice</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="navigation.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
-    <main class="shell">
-      <header class="app-header">
-        <div>
-          <div class="eyebrow">BLCVOICE · LOCAL DICTATION</div>
-          <h1>Speak. It types.</h1>
-          <p class="lead">Private desktop dictation with local speech recognition and platform-native text delivery.</p>
-        </div>
-        <span class="privacy-badge">Audio stays local</span>
-      </header>
-
-      <section class="hero-card" aria-labelledby="dictation-heading">
-        <div class="hero-topline">
+    <div class="app-frame">
+      <aside class="sidebar" aria-label="BLCVoice navigation">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <div>
-            <p class="step-label">DICTATION</p>
-            <h2 id="dictation-heading">Ready where you type</h2>
+            <strong>BLCVoice</strong>
+            <small>Local dictation</small>
           </div>
-          <span id="dictation-state" class="state-pill idle">Preparing</span>
         </div>
-        <p id="dictation-message" class="hero-copy">Checking your microphone, model and text-insertion capability…</p>
-        <div class="dictation-control-row">
-          <button id="dictation-toggle" class="dictation-button" type="button" disabled>
-            <span id="dictation-button-label">Start dictation</span>
-            <small>Ctrl + Shift + Space</small>
-          </button>
-          <button id="dictation-cancel" class="button secondary" type="button" hidden>Cancel</button>
-        </div>
-        <div id="transcript-card" class="transcript-card" hidden>
-          <div class="transcript-heading">
-            <span>Latest transcript</span>
-            <span id="transcript-meta" class="muted-text"></span>
-          </div>
-          <p id="transcript-text"></p>
-          <button id="copy-transcript" class="button secondary compact" type="button">Copy text</button>
-        </div>
-        <div id="dictation-error" class="message error" role="alert" hidden></div>
-      </section>
 
-      <div class="grid-two">
-        <section class="panel" aria-labelledby="model-heading">
-          <div class="panel-heading">
+        <nav class="side-nav">
+          <button class="nav-item active" type="button" data-view-target="home" aria-current="page">Home</button>
+          <button class="nav-item" type="button" data-view-target="history">History</button>
+          <button class="nav-item" type="button" data-view-target="models">Models</button>
+          <button class="nav-item" type="button" data-view-target="settings">Settings</button>
+          <button class="nav-item" type="button" data-view-target="diagnostics">Diagnostics</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="privacy-dot" aria-hidden="true"></span>
+          <div>
+            <strong>Audio stays local</strong>
+            <small>Microphone audio is not uploaded.</small>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="view-section" data-view="home" aria-labelledby="home-heading">
+          <header class="view-header">
             <div>
-              <p class="step-label">MODEL</p>
-              <h2 id="model-heading">Local speech model</h2>
+              <p class="eyebrow">HOME</p>
+              <h1 id="home-heading">Ready to dictate</h1>
+              <p class="lead">Stay in the app you are using. Press the shortcut, speak, then press it again to type.</p>
             </div>
+            <span class="shortcut-chip">Ctrl + Shift + Space</span>
+          </header>
+
+          <section class="hero-card home-hero" aria-labelledby="dictation-heading">
+            <div class="hero-topline">
+              <div>
+                <p class="step-label">DICTATION</p>
+                <h2 id="dictation-heading">Speak where your cursor is</h2>
+              </div>
+              <span id="dictation-state" class="state-pill idle">Preparing</span>
+            </div>
+            <p id="dictation-message" class="hero-copy">Checking your microphone, model and text-insertion capability…</p>
+            <div class="dictation-control-row">
+              <button id="dictation-toggle" class="dictation-button" type="button" disabled>
+                <span id="dictation-button-label">Start dictation</span>
+                <small>Ctrl + Shift + Space</small>
+              </button>
+              <button id="dictation-cancel" class="button secondary" type="button" hidden>Cancel</button>
+            </div>
+            <div id="transcript-card" class="transcript-card" hidden>
+              <div class="transcript-heading">
+                <span>Latest transcript</span>
+                <span id="transcript-meta" class="muted-text"></span>
+              </div>
+              <p id="transcript-text"></p>
+              <button id="copy-transcript" class="button secondary compact" type="button">Copy text</button>
+            </div>
+            <div id="dictation-error" class="message error" role="alert" hidden></div>
+          </section>
+
+          <div class="home-notes">
+            <article>
+              <span class="home-note-icon">⌁</span>
+              <div><strong>Stay focused</strong><small>The floating overlay never takes focus from your target app.</small></div>
+            </article>
+            <article>
+              <span class="home-note-icon">◎</span>
+              <div><strong>Runs locally</strong><small>Capture and speech recognition remain on this device.</small></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view-section" data-view="history" aria-labelledby="history-heading" hidden>
+          <header class="view-header compact-header">
+            <div><p class="eyebrow">HISTORY</p><h1 id="history-heading">Local transcripts</h1><p class="lead">Everything you dictated, without storing microphone audio.</p></div>
+            <button id="refresh-history" class="button secondary compact" type="button">Refresh</button>
+          </header>
+          <section class="panel feature-panel">
+            <p class="panel-copy">BLCVoice stores transcript text and delivery metadata in your private app-data directory. Microphone audio, PCM and VAD buffers are never kept in history.</p>
+            <div id="history-message" class="message muted" role="status">Loading local history…</div>
+            <div id="history-list" class="history-list" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <section class="view-section" data-view="models" aria-labelledby="model-heading" hidden>
+          <header class="view-header compact-header">
+            <div><p class="eyebrow">MODELS</p><h1 id="model-heading">Speech models</h1><p class="lead">Choose the local model that balances speed, memory and accuracy for this machine.</p></div>
             <span id="model-state" class="state-pill idle">Checking</span>
-          </div>
-          <p class="panel-copy">Choose a local model. BLCVoice recommends one from available system memory.</p>
-          <div id="model-list" class="model-list" aria-live="polite"></div>
-          <div id="model-message" class="message muted" role="status"></div>
+          </header>
+          <section class="panel feature-panel">
+            <div id="model-list" class="model-list" aria-live="polite"></div>
+            <div id="model-message" class="message muted" role="status"></div>
+          </section>
         </section>
 
-        <section class="panel" aria-labelledby="settings-heading">
-          <div class="panel-heading">
-            <div>
-              <p class="step-label">SETTINGS</p>
-              <h2 id="settings-heading">Input & language</h2>
-            </div>
-            <button id="refresh-devices" class="button secondary compact" type="button">Refresh</button>
+        <section class="view-section" data-view="settings" aria-labelledby="settings-heading" hidden>
+          <header class="view-header compact-header">
+            <div><p class="eyebrow">SETTINGS</p><h1 id="settings-heading">Input & language</h1><p class="lead">Keep the everyday controls here; technical backend details stay in Diagnostics.</p></div>
+            <button id="refresh-devices" class="button secondary compact" type="button">Refresh devices</button>
+          </header>
+
+          <div class="settings-grid">
+            <section class="panel feature-panel settings-card" aria-labelledby="input-heading">
+              <div class="panel-heading"><div><p class="step-label">INPUT</p><h2 id="input-heading">Microphone & language</h2></div></div>
+              <label class="field-label" for="device-select">Microphone</label>
+              <select id="device-select" class="select" disabled><option>Discovering microphones…</option></select>
+
+              <label class="field-label spaced" for="language-select">Recognition language</label>
+              <select id="language-select" class="select">
+                <option value="auto">Automatic detection</option>
+                <option value="tr">Turkish</option>
+                <option value="en">English</option>
+                <option value="de">German</option>
+                <option value="fr">French</option>
+                <option value="es">Spanish</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="ar">Arabic</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+              </select>
+
+              <dl class="device-details compact-details">
+                <div><dt>Backend</dt><dd id="device-backend">—</dd></div>
+                <div><dt>Native format</dt><dd id="device-format">—</dd></div>
+              </dl>
+              <div id="settings-message" class="message muted" role="status"></div>
+            </section>
+
+            <section class="panel feature-panel settings-card" aria-labelledby="test-heading">
+              <div class="panel-heading test-heading">
+                <div><p class="step-label">MICROPHONE CHECK</p><h2 id="test-heading">Verify capture</h2></div>
+                <span id="test-state" class="state-pill idle">Ready</span>
+              </div>
+              <p id="test-instruction" class="panel-copy">Run a short native capture check if dictation input seems wrong. Test audio is discarded after validation.</p>
+              <div id="test-progress-wrap" class="test-progress-wrap" hidden>
+                <div class="progress-meta"><span>Capturing locally</span><strong id="test-timer">0.0s</strong></div>
+                <progress id="test-progress" max="10" value="0">0%</progress>
+              </div>
+              <div class="actions">
+                <button id="start-test" class="button secondary" type="button" disabled>Test microphone</button>
+                <button id="finish-test" class="button primary" type="button" hidden>Finish test</button>
+                <button id="cancel-test" class="button secondary" type="button" hidden>Cancel</button>
+              </div>
+              <div id="result-card" class="result-card" hidden aria-live="polite">
+                <div class="result-title-row"><strong id="result-title">Capture result</strong><span id="result-badge" class="result-badge">—</span></div>
+                <p id="result-summary"></p>
+                <dl class="result-stats">
+                  <div><dt>Frames</dt><dd id="result-frames">—</dd></div>
+                  <div><dt>Dropped</dt><dd id="result-dropped">—</dd></div>
+                  <div><dt>Callback errors</dt><dd id="result-errors">—</dd></div>
+                </dl>
+              </div>
+            </section>
           </div>
-
-          <label class="field-label" for="device-select">Microphone</label>
-          <select id="device-select" class="select" disabled>
-            <option>Discovering microphones…</option>
-          </select>
-
-          <label class="field-label spaced" for="language-select">Recognition language</label>
-          <select id="language-select" class="select">
-            <option value="auto">Automatic detection</option>
-            <option value="tr">Turkish</option>
-            <option value="en">English</option>
-            <option value="de">German</option>
-            <option value="fr">French</option>
-            <option value="es">Spanish</option>
-            <option value="it">Italian</option>
-            <option value="pt">Portuguese</option>
-            <option value="ru">Russian</option>
-            <option value="ar">Arabic</option>
-            <option value="ja">Japanese</option>
-            <option value="ko">Korean</option>
-            <option value="zh">Chinese</option>
-          </select>
-
-          <dl class="device-details compact-details">
-            <div>
-              <dt>Backend</dt>
-              <dd id="device-backend">—</dd>
-            </div>
-            <div>
-              <dt>Native format</dt>
-              <dd id="device-format">—</dd>
-            </div>
-          </dl>
-          <div id="settings-message" class="message muted" role="status"></div>
         </section>
-      </div>
 
-      <section class="panel" aria-labelledby="test-heading">
-        <div class="panel-heading test-heading">
-          <div>
-            <p class="step-label">MICROPHONE CHECK</p>
-            <h2 id="test-heading">Verify native capture</h2>
-          </div>
-          <span id="test-state" class="state-pill idle">Ready</span>
-        </div>
-        <p id="test-instruction" class="panel-copy">Run a short capture check if dictation input seems wrong. Test audio is discarded after validation.</p>
-        <div id="test-progress-wrap" class="test-progress-wrap" hidden>
-          <div class="progress-meta"><span>Capturing locally</span><strong id="test-timer">0.0s</strong></div>
-          <progress id="test-progress" max="10" value="0">0%</progress>
-        </div>
-        <div class="actions">
-          <button id="start-test" class="button secondary" type="button" disabled>Test microphone</button>
-          <button id="finish-test" class="button primary" type="button" hidden>Finish test</button>
-          <button id="cancel-test" class="button secondary" type="button" hidden>Cancel</button>
-        </div>
-        <div id="result-card" class="result-card" hidden aria-live="polite">
-          <div class="result-title-row"><strong id="result-title">Capture result</strong><span id="result-badge" class="result-badge">—</span></div>
-          <p id="result-summary"></p>
-          <dl class="result-stats">
-            <div><dt>Frames</dt><dd id="result-frames">—</dd></div>
-            <div><dt>Dropped</dt><dd id="result-dropped">—</dd></div>
-            <div><dt>Callback errors</dt><dd id="result-errors">—</dd></div>
-          </dl>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="history-heading">
-        <div class="panel-heading">
-          <div>
-            <p class="step-label">HISTORY</p>
-            <h2 id="history-heading">Local transcripts</h2>
-          </div>
-          <button id="refresh-history" class="button secondary compact" type="button">Refresh</button>
-        </div>
-        <p class="panel-copy">BLCVoice stores transcript text and delivery metadata in your private app-data directory. Microphone audio, PCM and VAD buffers are never kept in history.</p>
-        <div id="history-message" class="message muted" role="status">Loading local history…</div>
-        <div id="history-list" class="history-list" aria-live="polite"></div>
-      </section>
-
-      <section class="panel diagnostics-panel" aria-labelledby="diagnostics-heading">
-        <div class="panel-heading">
-          <div>
-            <p class="step-label">DIAGNOSTICS</p>
-            <h2 id="diagnostics-heading">Platform capabilities</h2>
-          </div>
-          <button id="refresh-diagnostics" class="button secondary compact" type="button">Refresh</button>
-        </div>
-        <div class="diagnostic-grid">
-          <article class="diagnostic-item">
-            <span>Global shortcut</span>
-            <strong id="shortcut-backend">Checking…</strong>
-            <small id="shortcut-detail">—</small>
-          </article>
-          <article class="diagnostic-item">
-            <span>Text insertion</span>
-            <strong id="insertion-backend">Checking…</strong>
-            <small id="insertion-detail">—</small>
-          </article>
-          <article class="diagnostic-item">
-            <span>Recognizer</span>
-            <strong id="recognizer-detail">Not loaded</strong>
-            <small id="recognizer-backend">Starts on first dictation.</small>
-          </article>
-          <article class="diagnostic-item">
-            <span>Local history</span>
-            <strong id="history-backend">Checking…</strong>
-            <small id="history-detail">—</small>
-          </article>
-        </div>
-      </section>
-
-      <footer class="footer-note">BLCVoice does not upload microphone audio. Platform permissions for global shortcuts and text insertion remain controlled by your operating system.</footer>
-    </main>
+        <section class="view-section" data-view="diagnostics" aria-labelledby="diagnostics-heading" hidden>
+          <header class="view-header compact-header">
+            <div><p class="eyebrow">DIAGNOSTICS</p><h1 id="diagnostics-heading">Platform capabilities</h1><p class="lead">Technical details for troubleshooting Linux, Windows and macOS integration.</p></div>
+            <button id="refresh-diagnostics" class="button secondary compact" type="button">Refresh</button>
+          </header>
+          <section class="panel feature-panel diagnostics-panel">
+            <div class="diagnostic-grid">
+              <article class="diagnostic-item"><span>Global shortcut</span><strong id="shortcut-backend">Checking…</strong><small id="shortcut-detail">—</small></article>
+              <article class="diagnostic-item"><span>Text insertion</span><strong id="insertion-backend">Checking…</strong><small id="insertion-detail">—</small></article>
+              <article class="diagnostic-item"><span>Recognizer</span><strong id="recognizer-detail">Not loaded</strong><small id="recognizer-backend">Starts on first dictation.</small></article>
+              <article class="diagnostic-item"><span>Local history</span><strong id="history-backend">Checking…</strong><small id="history-detail">—</small></article>
+            </div>
+          </section>
+          <p class="footer-note">Platform permissions for global shortcuts and text insertion remain controlled by your operating system.</p>
+        </section>
+      </main>
+    </div>
   </body>
 </html>

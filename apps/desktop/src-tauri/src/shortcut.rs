@@ -13,7 +13,9 @@ use crate::coordinator::ShortcutDictationCoordinator;
 #[cfg(target_os = "linux")]
 use ashpd::desktop::{
     CreateSessionOptions,
-    global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut},
+    global_shortcuts::{
+        BindShortcutsOptions, ConfigureShortcutsOptions, GlobalShortcuts, NewShortcut,
+    },
 };
 #[cfg(target_os = "linux")]
 use futures_util::{StreamExt, stream};
@@ -26,6 +28,7 @@ pub const SHORTCUT_DECISION_EVENT: &str = "blcvoice://shortcut-decision";
 enum ShortcutRegistrationState {
     Pending,
     Registering,
+    ConfigurationRequired,
     Registered,
     Failed,
     Unavailable,
@@ -36,6 +39,7 @@ impl ShortcutRegistrationState {
         match self {
             Self::Pending => "pending",
             Self::Registering => "registering",
+            Self::ConfigurationRequired => "configuration required",
             Self::Registered => "registered",
             Self::Failed => "failed",
             Self::Unavailable => "unavailable",
@@ -50,6 +54,7 @@ struct ShortcutServiceState {
     selection_error: Option<ShortcutCapabilityError>,
     registration_state: ShortcutRegistrationState,
     registration_error: Option<String>,
+    bound_trigger_description: Option<String>,
     controller: ShortcutController,
 }
 
@@ -78,6 +83,7 @@ impl ShortcutService {
                 selection_error,
                 registration_state,
                 registration_error: None,
+                bound_trigger_description: None,
                 controller: ShortcutController::default(),
             }),
         }
@@ -92,14 +98,26 @@ impl ShortcutService {
         if state.backend.is_some() {
             state.registration_state = ShortcutRegistrationState::Registering;
             state.registration_error = None;
+            state.bound_trigger_description = None;
         }
     }
 
-    fn mark_registered(&self) {
+    fn mark_configuration_required(&self) {
+        let mut state = self.lock_state();
+        if state.backend.is_some() {
+            state.registration_state = ShortcutRegistrationState::ConfigurationRequired;
+            state.registration_error = None;
+            state.bound_trigger_description = None;
+            state.controller.force_idle();
+        }
+    }
+
+    fn mark_registered(&self, trigger_description: Option<String>) {
         let mut state = self.lock_state();
         if state.backend.is_some() {
             state.registration_state = ShortcutRegistrationState::Registered;
             state.registration_error = None;
+            state.bound_trigger_description = trigger_description;
         }
     }
 
@@ -107,6 +125,7 @@ impl ShortcutService {
         let mut state = self.lock_state();
         state.registration_state = ShortcutRegistrationState::Failed;
         state.registration_error = Some(message.into());
+        state.bound_trigger_description = None;
         state.controller.force_idle();
     }
 
@@ -141,7 +160,7 @@ pub struct ShortcutCapabilityDto {
     linux_display_server: Option<String>,
     selected_backend: Option<String>,
     registration_implemented: bool,
-    registration_state: &'static str,
+    registration_state: String,
     registration_error: Option<String>,
     selection_error: Option<ShortcutCapabilityErrorDto>,
 }
@@ -203,7 +222,9 @@ fn install_native_shortcut<R: Runtime>(app: &mut App<R>) {
         .build();
 
     match app.handle().plugin(plugin) {
-        Ok(()) => app.state::<ShortcutService>().mark_registered(),
+        Ok(()) => app
+            .state::<ShortcutService>()
+            .mark_registered(Some(DEFAULT_DICTATION_TRIGGER.to_owned())),
         Err(error) => app
             .state::<ShortcutService>()
             .mark_failed(format!("global shortcut registration failed: {error}")),
@@ -227,6 +248,26 @@ fn install_portal_shortcut<R: Runtime>(app: &mut App<R>) {
     app.state::<ShortcutService>().mark_failed(
         "XDG Desktop Portal global shortcuts are only available on Linux desktop sessions",
     );
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+enum PortalShortcutEvent {
+    Phase(ShortcutPhase),
+    BindingChanged(Option<String>),
+}
+
+#[cfg(target_os = "linux")]
+fn trigger_for_shortcut(
+    shortcuts: &[ashpd::desktop::global_shortcuts::Shortcut],
+) -> Option<String> {
+    shortcuts
+        .iter()
+        .find(|shortcut| shortcut.id() == DICTATION_SHORTCUT_ID)
+        .and_then(|shortcut| {
+            let trigger = shortcut.trigger_description().trim();
+            (!trigger.is_empty()).then(|| trigger.to_owned())
+        })
 }
 
 #[cfg(target_os = "linux")]
@@ -257,27 +298,59 @@ async fn run_portal_shortcut<R: Runtime>(app: AppHandle<R>) -> Result<(), String
         return Err("XDG portal response did not contain the BLCVoice shortcut".to_owned());
     }
 
+    let initial_trigger = trigger_for_shortcut(response.shortcuts());
+
     let activated = portal
         .receive_activated()
         .await
         .map_err(|error| format!("could not subscribe to XDG shortcut activation: {error}"))?
         .filter_map(|event| async move {
-            (event.shortcut_id() == DICTATION_SHORTCUT_ID).then_some(ShortcutPhase::Pressed)
+            (event.shortcut_id() == DICTATION_SHORTCUT_ID)
+                .then_some(PortalShortcutEvent::Phase(ShortcutPhase::Pressed))
         });
     let deactivated = portal
         .receive_deactivated()
         .await
         .map_err(|error| format!("could not subscribe to XDG shortcut deactivation: {error}"))?
         .filter_map(|event| async move {
-            (event.shortcut_id() == DICTATION_SHORTCUT_ID).then_some(ShortcutPhase::Released)
+            (event.shortcut_id() == DICTATION_SHORTCUT_ID)
+                .then_some(PortalShortcutEvent::Phase(ShortcutPhase::Released))
         });
+    let changed = portal
+        .receive_shortcuts_changed()
+        .await
+        .map_err(|error| format!("could not subscribe to XDG shortcut changes: {error}"))?
+        .map(|event| PortalShortcutEvent::BindingChanged(trigger_for_shortcut(event.shortcuts())));
 
-    app.state::<ShortcutService>().mark_registered();
+    if let Some(trigger) = initial_trigger {
+        app.state::<ShortcutService>()
+            .mark_registered(Some(trigger));
+    } else if portal.version() >= 2 {
+        app.state::<ShortcutService>().mark_configuration_required();
+        portal
+            .configure_shortcuts(&session, None, ConfigureShortcutsOptions::default())
+            .await
+            .map_err(|error| format!("could not open XDG shortcut configuration: {error}"))?;
+    } else {
+        return Err(format!(
+            "the desktop portal returned the BLCVoice shortcut without a trigger and GlobalShortcuts v{} cannot open the configuration UI",
+            portal.version()
+        ));
+    }
 
-    let events = stream::select(activated, deactivated);
+    let phase_events = stream::select(activated, deactivated);
+    let events = stream::select(phase_events, changed);
     futures_util::pin_mut!(events);
-    while let Some(phase) = events.next().await {
-        route_shortcut_phase(&app, phase);
+    while let Some(event) = events.next().await {
+        match event {
+            PortalShortcutEvent::Phase(phase) => route_shortcut_phase(&app, phase),
+            PortalShortcutEvent::BindingChanged(Some(trigger)) => app
+                .state::<ShortcutService>()
+                .mark_registered(Some(trigger)),
+            PortalShortcutEvent::BindingChanged(None) => {
+                app.state::<ShortcutService>().mark_configuration_required();
+            }
+        }
     }
 
     let _ = session.close().await;
@@ -306,13 +379,23 @@ fn shortcut_capability_for(state: &ShortcutServiceState) -> ShortcutCapabilityDt
         DesktopPlatform::Linux => Some(state.environment.linux_display_server().to_string()),
         DesktopPlatform::Windows | DesktopPlatform::MacOs | DesktopPlatform::Other => None,
     };
+    let registration_state = match state.registration_state {
+        ShortcutRegistrationState::ConfigurationRequired => {
+            "configuration required · KDE shortcut settings opened".to_owned()
+        }
+        ShortcutRegistrationState::Registered => match state.bound_trigger_description.as_deref() {
+            Some(trigger) => format!("registered · {trigger}"),
+            None => "registered".to_owned(),
+        },
+        other => other.as_str().to_owned(),
+    };
 
     ShortcutCapabilityDto {
         platform: platform.to_string(),
         linux_display_server,
         selected_backend: state.backend.map(|backend| backend.to_string()),
         registration_implemented: state.backend.is_some(),
-        registration_state: state.registration_state.as_str(),
+        registration_state,
         registration_error: state.registration_error.clone(),
         selection_error: state
             .selection_error
@@ -417,7 +500,7 @@ mod tests {
             ShortcutDecision::Ignore
         );
 
-        service.mark_registered();
+        service.mark_registered(Some("Ctrl+Shift+Space".to_owned()));
         assert_eq!(
             service.handle_phase(ShortcutPhase::Pressed),
             ShortcutDecision::StartDictation
@@ -438,7 +521,7 @@ mod tests {
             DesktopPlatform::Windows,
             LinuxDisplayServer::Unknown,
         ));
-        service.mark_registered();
+        service.mark_registered(Some(DEFAULT_DICTATION_TRIGGER.to_owned()));
         assert_eq!(
             service.handle_phase(ShortcutPhase::Pressed),
             ShortcutDecision::StartDictation
@@ -453,6 +536,38 @@ mod tests {
         );
         assert_eq!(
             service.handle_phase(ShortcutPhase::Released),
+            ShortcutDecision::Ignore
+        );
+    }
+
+    #[test]
+    fn registered_capability_reports_the_actual_trigger_description() {
+        let service = ShortcutService::for_environment(ShortcutEnvironment::new(
+            DesktopPlatform::Linux,
+            LinuxDisplayServer::Wayland,
+        ));
+        service.mark_registered(Some("Ctrl+Alt+Space".to_owned()));
+
+        assert_eq!(
+            service.capability().registration_state,
+            "registered · Ctrl+Alt+Space"
+        );
+    }
+
+    #[test]
+    fn missing_portal_trigger_is_not_reported_as_registered() {
+        let service = ShortcutService::for_environment(ShortcutEnvironment::new(
+            DesktopPlatform::Linux,
+            LinuxDisplayServer::Wayland,
+        ));
+        service.mark_configuration_required();
+
+        assert_eq!(
+            service.capability().registration_state,
+            "configuration required · KDE shortcut settings opened"
+        );
+        assert_eq!(
+            service.handle_phase(ShortcutPhase::Pressed),
             ShortcutDecision::Ignore
         );
     }
