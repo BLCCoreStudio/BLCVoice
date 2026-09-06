@@ -7,12 +7,25 @@
     <link rel="stylesheet" href="overlay.css" />
   </head>
   <body>
-    <main class="overlay-shell" aria-live="polite" aria-atomic="true">
-      <div id="state-indicator" class="state-indicator idle" aria-hidden="true"></div>
+    <main id="overlay-shell" class="overlay-shell idle" aria-live="polite" aria-atomic="true">
+      <div class="waveform" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+
       <div class="copy">
-        <strong id="overlay-title">BLCVoice</strong>
+        <div class="title-row">
+          <strong id="overlay-title">BLCVoice</strong>
+          <span id="recording-timer" class="timer" hidden>00:00</span>
+        </div>
         <span id="overlay-message">Ready</span>
       </div>
+
       <span id="shortcut-hint" class="shortcut-hint">Ctrl Shift Space</span>
     </main>
     <script src="overlay.js"></script>
