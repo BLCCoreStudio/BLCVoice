@@ -153,6 +153,9 @@ pub enum RecognitionTask {
 pub struct RecognitionOptions {
     pub task: RecognitionTask,
     pub language_hint: Option<String>,
+    /// Optional model-family context used to bias recognition toward expected vocabulary.
+    /// Adapters that do not support prompts may reject this option as unsupported.
+    pub initial_prompt: Option<String>,
     pub timestamps: TimestampGranularity,
     pub punctuation: FeaturePreference,
     pub inverse_text_normalization: FeaturePreference,
@@ -163,6 +166,7 @@ impl Default for RecognitionOptions {
         Self {
             task: RecognitionTask::Transcribe,
             language_hint: None,
+            initial_prompt: None,
             timestamps: TimestampGranularity::None,
             punctuation: FeaturePreference::ModelDefault,
             inverse_text_normalization: FeaturePreference::ModelDefault,
@@ -351,6 +355,7 @@ mod tests {
         assert_eq!(options.task, RecognitionTask::Transcribe);
         assert_eq!(options.timestamps, TimestampGranularity::None);
         assert_eq!(options.punctuation, FeaturePreference::ModelDefault);
+        assert_eq!(options.initial_prompt, None);
     }
 
     #[test]
