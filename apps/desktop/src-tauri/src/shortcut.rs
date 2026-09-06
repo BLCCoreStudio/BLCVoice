@@ -258,7 +258,9 @@ enum PortalShortcutEvent {
 }
 
 #[cfg(target_os = "linux")]
-fn trigger_for_shortcut(shortcuts: &[ashpd::desktop::global_shortcuts::Shortcut]) -> Option<String> {
+fn trigger_for_shortcut(
+    shortcuts: &[ashpd::desktop::global_shortcuts::Shortcut],
+) -> Option<String> {
     shortcuts
         .iter()
         .find(|shortcut| shortcut.id() == DICTATION_SHORTCUT_ID)
