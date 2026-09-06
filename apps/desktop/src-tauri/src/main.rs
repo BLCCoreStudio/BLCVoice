@@ -24,7 +24,9 @@ fn apply_linux_webkit_compatibility() {
         .env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
         .exec();
 
-    eprintln!("failed to restart BLCVoice with the KDE/Wayland WebKit compatibility guard: {error}");
+    eprintln!(
+        "failed to restart BLCVoice with the KDE/Wayland WebKit compatibility guard: {error}"
+    );
 }
 
 fn main() {
