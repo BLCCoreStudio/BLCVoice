@@ -8,6 +8,8 @@ use blcvoice_personalization::{
 use serde::Serialize;
 use tauri::State;
 
+use crate::ipc::DesktopState;
+
 const DEFAULT_LIST_LIMIT: u32 = 500;
 pub(crate) const DICTIONARY_PROMPT_MAX_BYTES: usize = 1024;
 
@@ -168,18 +170,17 @@ impl From<ReplacementRule> for ReplacementRuleDto {
 }
 
 #[tauri::command]
-pub fn personalization_status(
-    state: State<'_, PersonalizationService>,
-) -> PersonalizationHealthDto {
-    state.health()
+pub fn personalization_status(state: State<'_, DesktopState>) -> PersonalizationHealthDto {
+    state.personalization().health()
 }
 
 #[tauri::command]
 pub fn dictionary_list(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     limit: Option<u32>,
 ) -> Result<Vec<DictionaryTermDto>, String> {
     state
+        .personalization()
         .list_dictionary(limit.unwrap_or(DEFAULT_LIST_LIMIT))
         .map(|terms| terms.into_iter().map(DictionaryTermDto::from).collect())
         .map_err(|error| error.to_string())
@@ -187,10 +188,11 @@ pub fn dictionary_list(
 
 #[tauri::command]
 pub fn dictionary_add(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     term: String,
 ) -> Result<DictionaryTermDto, String> {
     state
+        .personalization()
         .add_dictionary(&term)
         .map(DictionaryTermDto::from)
         .map_err(|error| error.to_string())
@@ -198,20 +200,22 @@ pub fn dictionary_add(
 
 #[tauri::command]
 pub fn dictionary_delete(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     id: i64,
 ) -> Result<bool, String> {
     state
+        .personalization()
         .delete_dictionary(id)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn replacement_list(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     limit: Option<u32>,
 ) -> Result<Vec<ReplacementRuleDto>, String> {
     state
+        .personalization()
         .list_replacements(limit.unwrap_or(DEFAULT_LIST_LIMIT))
         .map(|rules| rules.into_iter().map(ReplacementRuleDto::from).collect())
         .map_err(|error| error.to_string())
@@ -219,11 +223,12 @@ pub fn replacement_list(
 
 #[tauri::command]
 pub fn replacement_add(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     source: String,
     replacement: String,
 ) -> Result<ReplacementRuleDto, String> {
     state
+        .personalization()
         .add_replacement(&source, &replacement)
         .map(ReplacementRuleDto::from)
         .map_err(|error| error.to_string())
@@ -231,10 +236,11 @@ pub fn replacement_add(
 
 #[tauri::command]
 pub fn replacement_delete(
-    state: State<'_, PersonalizationService>,
+    state: State<'_, DesktopState>,
     id: i64,
 ) -> Result<bool, String> {
     state
+        .personalization()
         .delete_replacement(id)
         .map_err(|error| error.to_string())
 }
