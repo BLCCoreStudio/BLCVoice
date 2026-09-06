@@ -11,7 +11,7 @@ on:
       - .github/workflows/branch-lockfile.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resolve-lockfile:
@@ -21,10 +21,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.0
-      - name: Resolve only missing manifest dependencies
+      - name: Resolve manifest dependencies
         run: cargo check -p blcvoice-insertion-eis
-      - uses: actions/upload-artifact@v4
-        with:
-          name: resolved-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
+      - name: Commit resolved lockfile
+        run: |
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock is already resolved"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: resolve Wayland clipboard lockfile"
+          git push
