@@ -73,7 +73,8 @@ pub fn run() {
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
-            text_rules::initialize(config_dir.clone()).map_err(std::io::Error::other)?;
+            text_rules::initialize(config_dir.clone())
+                .map_err(|error| std::io::Error::other(error.message().to_owned()))?;
             let desktop = DesktopState::production(config_dir, data_dir.clone())
                 .map_err(std::io::Error::other)?;
             app.manage(HistoryService::production(data_dir));
