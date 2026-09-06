@@ -11,6 +11,8 @@ const message = document.getElementById("overlay-message");
 const shortcutHint = document.getElementById("shortcut-hint");
 const recordingTimer = document.getElementById("recording-timer");
 
+const OVERLAY_WIDTH = 268;
+const OVERLAY_HEIGHT = 52;
 const POSITION_STORAGE_KEY = "blcvoice.overlay.position.v1";
 
 let lifecycleGeneration = 0;
@@ -63,6 +65,15 @@ function render(label, detail, kind, options = {}) {
   if (!showTimer) recordingTimer.hidden = true;
 }
 
+async function ensureCompactSize() {
+  if (!overlayWindow || !tauriWindow?.LogicalSize) return;
+  try {
+    await overlayWindow.setSize(new tauriWindow.LogicalSize(OVERLAY_WIDTH, OVERLAY_HEIGHT));
+  } catch {
+    // The static Tauri config has the same size; this is a runtime safety net.
+  }
+}
+
 function loadSavedPosition() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(POSITION_STORAGE_KEY) || "null");
@@ -85,7 +96,7 @@ async function positionInitially() {
       positioned = true;
       return;
     } catch {
-      // Fall through to the default left-edge position.
+      // Wayland intentionally does not expose global window coordinates.
     }
   }
 
@@ -97,19 +108,20 @@ async function positionInitially() {
     const scale = monitor.scaleFactor || 1;
     const logicalX = monitor.position.x / scale + 18;
     const logicalHeight = monitor.size.height / scale;
-    const logicalY = monitor.position.y / scale + Math.max(18, (logicalHeight - 52) * 0.45);
+    const logicalY = monitor.position.y / scale + Math.max(18, (logicalHeight - OVERLAY_HEIGHT) * 0.45);
     await overlayWindow.setPosition(
       new tauriWindow.LogicalPosition(Math.round(logicalX), Math.round(logicalY)),
     );
     positioned = true;
   } catch {
-    // Positioning is cosmetic. Never let it interfere with dictation.
+    // On Wayland the compositor owns absolute placement; drag remains available.
   }
 }
 
 async function showOverlay() {
   if (!overlayWindow) return;
   try {
+    await ensureCompactSize();
     await positionInitially();
     await overlayWindow.show();
   } catch {
@@ -197,9 +209,19 @@ async function watchPosition() {
   }
 }
 
+function installDragBehavior() {
+  if (!shell || !overlayWindow?.startDragging) return;
+  shell.addEventListener("mousedown", (event) => {
+    if (event.button !== 0) return;
+    void overlayWindow.startDragging().catch(() => {});
+  });
+}
+
 async function bootstrap() {
   if (!listen || !overlayWindow) return;
+  await ensureCompactSize();
   await watchPosition();
+  installDragBehavior();
   try {
     unlisten = await listen("blcvoice://dictation-lifecycle", (event) => {
       applyLifecycle(event.payload);
