@@ -19,28 +19,16 @@ jobs:
           ref: feat/v1-history-personalization
           fetch-depth: 0
 
-      - name: Install desktop native prerequisites
+      - name: Install desktop prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev \
-            libpipewire-0.3-dev \
-            libpulse-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libpipewire-0.3-dev libpulse-dev
 
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt,clippy
 
-      - name: Patch desktop state, command registration, and personalization views
+      - name: Patch desktop personalization wiring
         shell: python
         run: |
           from pathlib import Path
@@ -53,164 +41,45 @@ jobs:
 
           ipc_path = Path("apps/desktop/src-tauri/src/ipc.rs")
           ipc = ipc_path.read_text()
-          ipc = replace_once(
-              ipc,
-              'use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};\nuse serde::Serialize;',
-              'use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};\nuse blcvoice_personalization::PersonalizationError;\nuse serde::Serialize;',
-              "ipc personalization import",
-          )
-          ipc = replace_once(
-              ipc,
-              'use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};\nuse crate::settings::{AppSettings, SettingsError, SettingsService};',
-              'use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};\nuse crate::personalization::PersonalizationService;\nuse crate::settings::{AppSettings, SettingsError, SettingsService};',
-              "ipc service import",
-          )
-          ipc = replace_once(
-              ipc,
-              '    settings: Arc<SettingsService>,\n    models: Arc<ModelManager>,\n}',
-              '    settings: Arc<SettingsService>,\n    models: Arc<ModelManager>,\n    personalization: PersonalizationService,\n}',
-              "desktop state field",
-          )
-          ipc = replace_once(
-              ipc,
-              '        let models = Arc::new(ModelManager::new(data_dir).map_err(|error| error.to_string())?);\n        Ok(Self {\n            capture,\n            dictation,\n            insertion,\n            settings,\n            models,\n        })',
-              '        let models = Arc::new(ModelManager::new(data_dir.clone()).map_err(|error| error.to_string())?);\n        let personalization = PersonalizationService::production(data_dir);\n        Ok(Self {\n            capture,\n            dictation,\n            insertion,\n            settings,\n            models,\n            personalization,\n        })',
-              "desktop production personalization",
-          )
-          ipc = replace_once(
-              ipc,
-              'impl DesktopState {\n    pub(crate) fn start_configured_dictation(&self) -> Result<SessionSnapshot, CommandErrorDto> {',
-              'impl DesktopState {\n    pub(crate) fn personalization(&self) -> &PersonalizationService {\n        &self.personalization\n    }\n\n    pub(crate) fn start_configured_dictation(&self) -> Result<SessionSnapshot, CommandErrorDto> {',
-              "desktop personalization accessor",
-          )
-          ipc = replace_once(
-              ipc,
-              '        let recognition = RecognitionOptions {\n            language_hint: snapshot.language_hint().map(str::to_owned),\n            ..RecognitionOptions::default()\n        };',
-              '        let recognition = RecognitionOptions {\n            language_hint: snapshot.language_hint().map(str::to_owned),\n            initial_prompt: self.personalization.dictionary_prompt().map_err(CommandErrorDto::from)?,\n            ..RecognitionOptions::default()\n        };',
-              "configured dictionary prompt",
-          )
-          ipc = replace_once(
-              ipc,
-              '        let report = match self\n            .dictation\n            .finish(session_id)\n            .map_err(CommandErrorDto::from)?\n        {',
-              '        let mut report = match self\n            .dictation\n            .finish(session_id)\n            .map_err(CommandErrorDto::from)?\n        {',
-              "mutable finish report",
-          )
-          ipc = replace_once(
-              ipc,
-              '        let text = report.transcription.capture.transcription.text.clone();\n        self.dictation',
-              '        let original_text = report.transcription.capture.transcription.text.clone();\n        let text = self\n            .personalization\n            .apply_replacements(&original_text)\n            .map_err(CommandErrorDto::from)?;\n        if text != original_text {\n            let transcription = &mut report.transcription.capture.transcription;\n            if transcription.raw_text.is_none() {\n                transcription.raw_text = Some(original_text);\n            }\n            transcription.text = text.clone();\n        }\n        self.dictation',
-              "replacement before insertion",
-          )
-          ipc = replace_once(
-              ipc,
-              'impl From<SettingsError> for CommandErrorDto {\n    fn from(error: SettingsError) -> Self {\n        Self::plain("settings_failed", error.message())\n    }\n}\n\nimpl From<ModelError> for CommandErrorDto {',
-              'impl From<SettingsError> for CommandErrorDto {\n    fn from(error: SettingsError) -> Self {\n        Self::plain("settings_failed", error.message())\n    }\n}\n\nimpl From<PersonalizationError> for CommandErrorDto {\n    fn from(error: PersonalizationError) -> Self {\n        Self::plain("personalization_failed", error.to_string())\n    }\n}\n\nimpl From<ModelError> for CommandErrorDto {',
-              "personalization error mapping",
-          )
+          ipc = replace_once(ipc, 'use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};\nuse serde::Serialize;', 'use blcvoice_insertion::{InsertionError, InsertionErrorKind, InsertionReceipt};\nuse blcvoice_personalization::PersonalizationError;\nuse serde::Serialize;', "ipc personalization import")
+          ipc = replace_once(ipc, 'use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};\nuse crate::settings::{AppSettings, SettingsError, SettingsService};', 'use crate::models::{ModelError, ModelErrorKind, ModelManager, ModelStatus};\nuse crate::personalization::PersonalizationService;\nuse crate::settings::{AppSettings, SettingsError, SettingsService};', "ipc service import")
+          ipc = replace_once(ipc, '    settings: Arc<SettingsService>,\n    models: Arc<ModelManager>,\n}', '    settings: Arc<SettingsService>,\n    models: Arc<ModelManager>,\n    personalization: PersonalizationService,\n}', "desktop state field")
+          ipc = replace_once(ipc, '        let models = Arc::new(ModelManager::new(data_dir).map_err(|error| error.to_string())?);\n        Ok(Self {\n            capture,\n            dictation,\n            insertion,\n            settings,\n            models,\n        })', '        let models = Arc::new(ModelManager::new(data_dir.clone()).map_err(|error| error.to_string())?);\n        let personalization = PersonalizationService::production(data_dir);\n        Ok(Self {\n            capture,\n            dictation,\n            insertion,\n            settings,\n            models,\n            personalization,\n        })', "desktop production personalization")
+          ipc = replace_once(ipc, 'impl DesktopState {\n    pub(crate) fn start_configured_dictation(&self) -> Result<SessionSnapshot, CommandErrorDto> {', 'impl DesktopState {\n    pub(crate) fn personalization(&self) -> &PersonalizationService {\n        &self.personalization\n    }\n\n    pub(crate) fn start_configured_dictation(&self) -> Result<SessionSnapshot, CommandErrorDto> {', "desktop personalization accessor")
+          ipc = replace_once(ipc, '        let recognition = RecognitionOptions {\n            language_hint: snapshot.language_hint().map(str::to_owned),\n            ..RecognitionOptions::default()\n        };', '        let recognition = RecognitionOptions {\n            language_hint: snapshot.language_hint().map(str::to_owned),\n            initial_prompt: self.personalization.dictionary_prompt().map_err(CommandErrorDto::from)?,\n            ..RecognitionOptions::default()\n        };', "configured dictionary prompt")
+          ipc = replace_once(ipc, '        let report = match self\n            .dictation\n            .finish(session_id)\n            .map_err(CommandErrorDto::from)?\n        {', '        let mut report = match self\n            .dictation\n            .finish(session_id)\n            .map_err(CommandErrorDto::from)?\n        {', "mutable finish report")
+          ipc = replace_once(ipc, '        let text = report.transcription.capture.transcription.text.clone();\n        self.dictation', '        let original_text = report.transcription.capture.transcription.text.clone();\n        let text = self\n            .personalization\n            .apply_replacements(&original_text)\n            .map_err(CommandErrorDto::from)?;\n        if text != original_text {\n            let transcription = &mut report.transcription.capture.transcription;\n            if transcription.raw_text.is_none() {\n                transcription.raw_text = Some(original_text);\n            }\n            transcription.text = text.clone();\n        }\n        self.dictation', "replacement before insertion")
+          ipc = replace_once(ipc, 'impl From<SettingsError> for CommandErrorDto {\n    fn from(error: SettingsError) -> Self {\n        Self::plain("settings_failed", error.message())\n    }\n}\n\nimpl From<ModelError> for CommandErrorDto {', 'impl From<SettingsError> for CommandErrorDto {\n    fn from(error: SettingsError) -> Self {\n        Self::plain("settings_failed", error.message())\n    }\n}\n\nimpl From<PersonalizationError> for CommandErrorDto {\n    fn from(error: PersonalizationError) -> Self {\n        Self::plain("personalization_failed", error.to_string())\n    }\n}\n\nimpl From<ModelError> for CommandErrorDto {', "personalization error mapping")
           ipc_path.write_text(ipc)
 
           lib_path = Path("apps/desktop/src-tauri/src/lib.rs")
           lib = lib_path.read_text()
           lib = replace_once(lib, 'mod models;\nmod settings;', 'mod models;\nmod personalization;\nmod settings;', "personalization module")
-          lib = replace_once(
-              lib,
-              'use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};',
-              'use personalization::{\n    dictionary_add, dictionary_delete, dictionary_list, personalization_status, replacement_add,\n    replacement_delete, replacement_list,\n};\nuse shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};',
-              "personalization commands import",
-          )
-          lib = replace_once(
-              lib,
-              '            history_delete,\n            shortcut_capability,',
-              '            history_delete,\n            personalization_status,\n            dictionary_list,\n            dictionary_add,\n            dictionary_delete,\n            replacement_list,\n            replacement_add,\n            replacement_delete,\n            shortcut_capability,',
-              "personalization command registration",
-          )
+          lib = replace_once(lib, 'use shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};', 'use personalization::{\n    dictionary_add, dictionary_delete, dictionary_list, personalization_status, replacement_add,\n    replacement_delete, replacement_list,\n};\nuse shortcut::{ShortcutService, install_shortcut_backend, shortcut_capability};', "personalization commands import")
+          lib = replace_once(lib, '            history_delete,\n            shortcut_capability,', '            history_delete,\n            personalization_status,\n            dictionary_list,\n            dictionary_add,\n            dictionary_delete,\n            replacement_list,\n            replacement_add,\n            replacement_delete,\n            shortcut_capability,', "personalization command registration")
           lib_path.write_text(lib)
-
-          index_path = Path("apps/desktop/ui/index.html")
-          index = index_path.read_text()
-          index = replace_once(
-              index,
-              '    <link rel="stylesheet" href="styles.css" />\n    <script src="navigation.js" defer></script>\n    <script src="app.js" defer></script>',
-              '    <link rel="stylesheet" href="styles.css" />\n    <link rel="stylesheet" href="personalization.css" />\n    <script src="navigation.js" defer></script>\n    <script src="app.js" defer></script>\n    <script src="personalization-ui.js" defer></script>',
-              "personalization assets",
-          )
-          index = replace_once(
-              index,
-              '          <button class="nav-item" type="button" data-view-target="history">History</button>\n          <button class="nav-item" type="button" data-view-target="models">Models</button>',
-              '          <button class="nav-item" type="button" data-view-target="history">History</button>\n          <button class="nav-item" type="button" data-view-target="dictionary">Dictionary</button>\n          <button class="nav-item" type="button" data-view-target="replacements">Replacements</button>\n          <button class="nav-item" type="button" data-view-target="models">Models</button>',
-              "personalization nav",
-          )
-          model_marker = '        <section class="view-section" data-view="models" aria-labelledby="model-heading" hidden>'
-          personalization_views = '''        <section class="view-section" data-view="dictionary" aria-labelledby="dictionary-heading" hidden>
-          <header class="view-header compact-header">
-            <div><p class="eyebrow">DICTIONARY</p><h1 id="dictionary-heading">Recognition vocabulary</h1><p class="lead">Teach the local recognizer names, brands and specialist terms that matter to you.</p></div>
-            <span id="personalization-status" class="state-pill idle">Checking</span>
-          </header>
-          <div class="personalization-stack">
-            <section class="panel feature-panel">
-              <div class="personalization-intro"><p class="panel-copy">Dictionary words stay on this device and are supplied to Whisper as a bounded initial prompt. They bias recognition; they do not replace your spoken text after transcription.</p></div>
-              <form id="dictionary-form" class="personalization-form">
-                <label class="field-group"><span class="field-label">Word or phrase</span><input id="dictionary-term" type="text" maxlength="256" placeholder="BLCVoice, Yusuf, CachyOS…" autocomplete="off" /></label>
-                <button class="button primary" type="submit">Add word</button>
-              </form>
-              <div id="dictionary-message" class="message muted" role="status">Loading local dictionary…</div>
-              <div id="dictionary-list" class="personalization-list" aria-live="polite"></div>
-              <div class="personalization-help"><article><strong>Best for names</strong><small>People, products, project names and technical vocabulary that Whisper may not know.</small></article><article><strong>Recognition hint</strong><small>Dictionary entries influence decoding, while deterministic corrections belong in Replacements.</small></article></div>
-            </section>
-          </div>
-        </section>
-
-        <section class="view-section" data-view="replacements" aria-labelledby="replacements-heading" hidden>
-          <header class="view-header compact-header">
-            <div><p class="eyebrow">REPLACEMENTS</p><h1 id="replacements-heading">Always correct</h1><p class="lead">Fix predictable recognition mistakes locally before the transcript reaches the target app.</p></div>
-          </header>
-          <div class="personalization-stack">
-            <section class="panel feature-panel">
-              <p class="panel-copy">Replacement rules are deterministic and non-cascading. The longest matching phrase wins, and the final corrected text is what BLCVoice inserts and stores in History.</p>
-              <form id="replacement-form" class="personalization-form replacement-form">
-                <label class="field-group"><span class="field-label">When BLCVoice hears</span><input id="replacement-source" type="text" maxlength="256" placeholder="Paysa ya" autocomplete="off" /></label>
-                <span class="replacement-form-arrow" aria-hidden="true">→</span>
-                <label class="field-group"><span class="field-label">Always write</span><input id="replacement-destination" type="text" maxlength="1024" placeholder="yapay zeka" autocomplete="off" /></label>
-                <button class="button primary" type="submit">Add rule</button>
-              </form>
-              <div id="replacement-message" class="message muted" role="status">Loading local replacements…</div>
-              <div id="replacement-list" class="personalization-list" aria-live="polite"></div>
-            </section>
-          </div>
-        </section>
-
-'''
-          index = replace_once(index, model_marker, personalization_views + model_marker, "personalization views")
-          index_path.write_text(index)
 
       - name: Refresh lockfile
         run: cargo generate-lockfile
 
-      - name: Format and validate UI
-        run: |
-          cargo fmt --all
-          node --check apps/desktop/ui/app.js
-          node --check apps/desktop/ui/personalization-ui.js
-          python3 -m json.tool apps/desktop/src-tauri/tauri.conf.json > /dev/null
+      - name: Format
+        run: cargo fmt --all
 
-      - name: Test and lint personalization stack
+      - name: Test personalization stack
         run: |
           cargo test -p blcvoice-personalization --locked
           cargo test -p blcvoice-asr --locked
           cargo test -p blcvoice-asr-transcribe --locked
           cargo test -p blcvoice-desktop --lib --locked
-          cargo clippy -p blcvoice-personalization -p blcvoice-asr -p blcvoice-asr-transcribe -p blcvoice-desktop --all-targets --locked -- -D warnings
 
-      - name: Commit validated wiring and remove helper workflow
-        shell: bash
+      - name: Lint personalization stack
+        run: cargo clippy -p blcvoice-personalization -p blcvoice-asr -p blcvoice-asr-transcribe -p blcvoice-desktop --all-targets --locked -- -D warnings
+
+      - name: Commit validated wiring
         run: |
-          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock \
-                  apps/desktop/src-tauri/src/ipc.rs \
-                  apps/desktop/src-tauri/src/lib.rs \
-                  apps/desktop/ui/index.html
+          git add Cargo.lock apps/desktop/src-tauri/src/ipc.rs apps/desktop/src-tauri/src/lib.rs
           git rm .github/workflows/apply-personalization-wiring.yml
           git commit -m "feat: wire local dictionary and replacements into dictation"
           git push origin HEAD:feat/v1-history-personalization
