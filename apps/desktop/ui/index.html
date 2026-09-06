@@ -7,8 +7,10 @@
     <meta name="description" content="BLCVoice private local desktop dictation" />
     <title>BLCVoice</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="lexicon.css" />
     <script src="navigation.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="lexicon.js" defer></script>
   </head>
   <body>
     <div class="app-frame">
@@ -24,6 +26,7 @@
         <nav class="side-nav">
           <button class="nav-item active" type="button" data-view-target="home" aria-current="page">Home</button>
           <button class="nav-item" type="button" data-view-target="history">History</button>
+          <button class="nav-item" type="button" data-view-target="dictionary">Dictionary</button>
           <button class="nav-item" type="button" data-view-target="models">Models</button>
           <button class="nav-item" type="button" data-view-target="settings">Settings</button>
           <button class="nav-item" type="button" data-view-target="diagnostics">Diagnostics</button>
@@ -98,6 +101,81 @@
             <div id="history-message" class="message muted" role="status">Loading local history…</div>
             <div id="history-list" class="history-list" aria-live="polite"></div>
           </section>
+        </section>
+
+        <section class="view-section" data-view="dictionary" aria-labelledby="dictionary-heading" hidden>
+          <header class="view-header compact-header">
+            <div>
+              <p class="eyebrow">DICTIONARY</p>
+              <h1 id="dictionary-heading">Words BLCVoice should know</h1>
+              <p class="lead">Keep names and specialist terms consistent, then fix recurring recognition mistakes deterministically.</p>
+            </div>
+            <button id="refresh-lexicon" class="button secondary compact" type="button">Refresh</button>
+          </header>
+
+          <div class="lexicon-toolbar">
+            <input id="lexicon-search" class="lexicon-search" type="search" placeholder="Search terms and replacements…" aria-label="Search dictionary and replacements" />
+          </div>
+          <div id="lexicon-message" class="message muted" role="status"></div>
+
+          <div class="lexicon-grid">
+            <section class="panel feature-panel lexicon-panel" aria-labelledby="custom-terms-heading">
+              <div class="lexicon-panel-heading">
+                <div>
+                  <p class="step-label">VOCABULARY</p>
+                  <h2 id="custom-terms-heading">Custom terms</h2>
+                </div>
+              </div>
+              <form id="dictionary-form" class="lexicon-form">
+                <input id="dictionary-id" type="hidden" />
+                <label class="lexicon-field">
+                  <span>Correct spelling</span>
+                  <input id="dictionary-term" type="text" autocomplete="off" placeholder="e.g. BLCVoice" required />
+                </label>
+                <label class="lexicon-field">
+                  <span>Possible recognizer variants</span>
+                  <textarea id="dictionary-aliases" rows="2" placeholder="e.g. blc voice, belce voice"></textarea>
+                </label>
+                <div class="lexicon-check-row">
+                  <label><input id="dictionary-enabled" type="checkbox" checked /> Active</label>
+                </div>
+                <div class="lexicon-form-actions">
+                  <button id="dictionary-submit" class="button primary compact" type="submit">Add term</button>
+                  <button id="dictionary-cancel-edit" class="button secondary compact" type="button" hidden>Cancel edit</button>
+                </div>
+              </form>
+              <div id="dictionary-list" class="lexicon-list" aria-live="polite"></div>
+            </section>
+
+            <section class="panel feature-panel lexicon-panel" aria-labelledby="replacements-heading">
+              <div class="lexicon-panel-heading">
+                <div>
+                  <p class="step-label">REPLACEMENTS</p>
+                  <h2 id="replacements-heading">Automatic fixes</h2>
+                </div>
+              </div>
+              <form id="replacement-form" class="lexicon-form">
+                <input id="replacement-id" type="hidden" />
+                <label class="lexicon-field">
+                  <span>When BLCVoice hears</span>
+                  <input id="replacement-from" type="text" autocomplete="off" placeholder="e.g. Paysa" required />
+                </label>
+                <label class="lexicon-field">
+                  <span>Replace with</span>
+                  <input id="replacement-to" type="text" autocomplete="off" placeholder="e.g. yapay zeka" required />
+                </label>
+                <div class="lexicon-check-row">
+                  <label><input id="replacement-enabled" type="checkbox" checked /> Active</label>
+                  <label><input id="replacement-whole-word" type="checkbox" checked /> Whole words only</label>
+                </div>
+                <div class="lexicon-form-actions">
+                  <button id="replacement-submit" class="button primary compact" type="submit">Add replacement</button>
+                  <button id="replacement-cancel-edit" class="button secondary compact" type="button" hidden>Cancel edit</button>
+                </div>
+              </form>
+              <div id="replacement-list" class="lexicon-list" aria-live="polite"></div>
+            </section>
+          </div>
         </section>
 
         <section class="view-section" data-view="models" aria-labelledby="model-heading" hidden>
