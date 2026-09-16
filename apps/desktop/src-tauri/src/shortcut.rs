@@ -28,6 +28,7 @@ pub const SHORTCUT_DECISION_EVENT: &str = "blcvoice://shortcut-decision";
 enum ShortcutRegistrationState {
     Pending,
     Registering,
+    #[cfg(any(target_os = "linux", test))]
     ConfigurationRequired,
     Registered,
     Failed,
@@ -39,6 +40,7 @@ impl ShortcutRegistrationState {
         match self {
             Self::Pending => "pending",
             Self::Registering => "registering",
+            #[cfg(any(target_os = "linux", test))]
             Self::ConfigurationRequired => "configuration required",
             Self::Registered => "registered",
             Self::Failed => "failed",
@@ -102,6 +104,7 @@ impl ShortcutService {
         }
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn mark_configuration_required(&self) {
         let mut state = self.lock_state();
         if state.backend.is_some() {
@@ -380,6 +383,7 @@ fn shortcut_capability_for(state: &ShortcutServiceState) -> ShortcutCapabilityDt
         DesktopPlatform::Windows | DesktopPlatform::MacOs | DesktopPlatform::Other => None,
     };
     let registration_state = match state.registration_state {
+        #[cfg(any(target_os = "linux", test))]
         ShortcutRegistrationState::ConfigurationRequired => {
             "configuration required · KDE shortcut settings opened".to_owned()
         }
