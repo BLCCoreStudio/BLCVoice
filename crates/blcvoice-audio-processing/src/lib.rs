@@ -450,6 +450,10 @@ impl AudioPreprocessor {
             let (input_frames, output_frames) = resampler
                 .process_into_buffer(&input_adapter, &mut output_adapter, None)
                 .map_err(|error| ProcessingError::Resampling(error.to_string()))?;
+            let valid_samples = output_frames
+                .checked_mul(target_channels)
+                .ok_or(ProcessingError::BufferSizeOverflow)?;
+            clamp_resampler_overshoot(&mut output[..valid_samples]);
 
             Ok(ProcessReport {
                 input_frames,
@@ -657,10 +661,22 @@ fn resample_complete_utterance(
 
         output.copy_within(valid_start..valid_end, 0);
         output.truncate(valid_samples);
+        clamp_resampler_overshoot(output);
         Ok(expected_output_frames)
     })();
     resampler.reset();
     result
+}
+
+/// Band-limited resampling can ring slightly beyond the nominal full-scale PCM range even when
+/// every source sample is valid. Clamp only finite resampler output; NaN/Inf are deliberately left
+/// untouched so the strict ASR input validator still rejects genuinely invalid processing output.
+fn clamp_resampler_overshoot(samples: &mut [f32]) {
+    for sample in samples {
+        if sample.is_finite() {
+            *sample = sample.clamp(-1.0, 1.0);
+        }
+    }
 }
 
 fn validate_channel_conversion(source: u16, target: u16) -> Result<(), ProcessingError> {
@@ -835,7 +851,7 @@ mod tests {
         assert!(
             output[..report.output_frames]
                 .iter()
-                .all(|sample| sample.is_finite())
+                .all(|sample| sample.is_finite() && (-1.0..=1.0).contains(sample))
         );
     }
 
@@ -976,6 +992,42 @@ mod tests {
         assert_eq!(processed.frames(), 334);
         assert_eq!(processed.format(), target);
         assert!(processed.samples().iter().all(|sample| sample.is_finite()));
+    }
+
+    #[test]
+    fn complete_utterance_resampling_keeps_bounded_pcm_in_unit_range() {
+        let source = format(1, 48_000);
+        let target = format(1, 16_000);
+        let mut processor =
+            AudioPreprocessor::with_chunk_frames(source, target, 960).expect("valid processor");
+        let mut input = Vec::with_capacity(4_800);
+        for frame in 0..4_800 {
+            input.push(if (frame / 120) % 2 == 0 { 1.0 } else { -1.0 });
+        }
+
+        let processed = processor
+            .process_utterance(&input)
+            .expect("bounded full-scale waveform must resample successfully");
+
+        assert!(
+            processed
+                .samples()
+                .iter()
+                .all(|sample| sample.is_finite() && (-1.0..=1.0).contains(sample))
+        );
+    }
+
+    #[test]
+    fn resampler_clamp_leaves_non_finite_output_for_strict_validation() {
+        let mut samples = [1.125, -1.25, 0.5, f32::NAN, f32::INFINITY];
+
+        clamp_resampler_overshoot(&mut samples);
+
+        assert_eq!(samples[0], 1.0);
+        assert_eq!(samples[1], -1.0);
+        assert_eq!(samples[2], 0.5);
+        assert!(samples[3].is_nan());
+        assert!(samples[4].is_infinite());
     }
 
     #[test]

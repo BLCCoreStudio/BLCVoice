@@ -1,0 +1,5 @@
+# Keep the default local ASR build self-contained and deterministic.
+# Host-wide BLAS/MKL installations must not silently change BLCVoice's native link graph.
+# Developers can still override this environment variable explicitly for controlled experiments.
+[env]
+TRANSCRIBE_CMAKE_ARGS = { value = "-DTRANSCRIBE_USE_SYSTEM_BLAS=OFF", force = false }
