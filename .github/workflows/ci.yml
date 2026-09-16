@@ -148,6 +148,7 @@ jobs:
         run: |
           node --check apps/desktop/ui/app.js
           node --check apps/desktop/ui/overlay.js
+          node --check apps/desktop/ui/lexicon.js
       - name: Validate Tauri configuration JSON
         run: |
           python3 -m json.tool apps/desktop/src-tauri/tauri.conf.json > /dev/null

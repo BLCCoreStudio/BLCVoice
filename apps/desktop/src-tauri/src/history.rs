@@ -11,6 +11,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::ipc::{CommandErrorDto, DesktopState, DictationReportDto};
+use crate::text_rules::apply_text_rules;
 
 const DEFAULT_HISTORY_LIMIT: u32 = 100;
 
@@ -62,7 +63,7 @@ impl HistoryService {
         let result = report_history_metadata(report).and_then(|metadata| {
             self.append(NewHistoryEntry {
                 created_at_unix_ms: unix_time_ms(),
-                transcript: report.text().to_owned(),
+                transcript: apply_text_rules(report.text()),
                 invocation_source: origin.into(),
                 engine_id: metadata.engine_id,
                 model_id: metadata.model_id,
@@ -90,7 +91,7 @@ impl HistoryService {
         // Preserve it without inventing recognizer provenance.
         let result = self.append(NewHistoryEntry {
             created_at_unix_ms: unix_time_ms(),
-            transcript: text.to_owned(),
+            transcript: apply_text_rules(text),
             invocation_source: origin.into(),
             engine_id: "unknown".to_owned(),
             model_id: "unknown".to_owned(),
