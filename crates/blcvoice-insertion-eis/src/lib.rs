@@ -11,6 +11,7 @@ const EI_TEXT_MAX_UTF8_BYTES: usize = 254;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SubmissionMode {
     Text,
+    #[cfg(any(target_os = "linux", test))]
     ClipboardKeyboard,
 }
 
@@ -34,6 +35,7 @@ impl WaylandEisOptions {
 const fn capability_for_mode(mode: SubmissionMode) -> InsertionCapability {
     let backend = match mode {
         SubmissionMode::Text => InsertionBackend::XdgRemoteDesktopEis,
+        #[cfg(any(target_os = "linux", test))]
         SubmissionMode::ClipboardKeyboard => InsertionBackend::XdgRemoteDesktopEisClipboard,
     };
     InsertionCapability::new(backend, InsertionAuthorization::XdgRemoteDesktop)
