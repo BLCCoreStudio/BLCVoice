@@ -1,0 +1,193 @@
+.lexicon-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.lexicon-search {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 11px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.035);
+  font: inherit;
+}
+
+.lexicon-search:focus,
+.lexicon-field input:focus,
+.lexicon-field textarea:focus {
+  outline: 2px solid rgba(137, 122, 255, 0.45);
+  outline-offset: 1px;
+}
+
+.lexicon-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.lexicon-panel {
+  min-width: 0;
+}
+
+.lexicon-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.lexicon-panel-heading h2 {
+  margin: 3px 0 0;
+}
+
+.lexicon-form {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.lexicon-field {
+  display: grid;
+  gap: 6px;
+}
+
+.lexicon-field > span {
+  color: var(--muted, #a4a4a7);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.lexicon-field input,
+.lexicon-field textarea {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.035);
+  font: inherit;
+  resize: vertical;
+}
+
+.lexicon-field textarea {
+  min-height: 64px;
+}
+
+.lexicon-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  color: var(--muted, #a4a4a7);
+  font-size: 0.76rem;
+}
+
+.lexicon-check-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.lexicon-form-actions,
+.lexicon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.lexicon-list {
+  display: grid;
+  gap: 9px;
+}
+
+.lexicon-item {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.lexicon-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.lexicon-item-header > strong {
+  overflow-wrap: anywhere;
+}
+
+.lexicon-item p {
+  margin: 7px 0 10px;
+  color: var(--muted, #a4a4a7);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.lexicon-badge {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 0.61rem;
+  font-weight: 750;
+}
+
+.lexicon-badge.enabled {
+  color: #65dba0;
+  background: rgba(65, 205, 139, 0.1);
+  border: 1px solid rgba(65, 205, 139, 0.22);
+}
+
+.lexicon-badge.disabled {
+  color: #a7a7ac;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.replacement-mapping {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.replacement-mapping code {
+  max-width: 46%;
+  padding: 3px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lexicon-empty {
+  margin: 0;
+  padding: 15px;
+  border: 1px dashed rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+  color: var(--muted, #a4a4a7);
+  font-size: 0.77rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .lexicon-grid {
+    grid-template-columns: 1fr;
+  }
+}
