@@ -78,12 +78,13 @@ For KDE Plasma 6 and GNOME Wayland, verify:
 1. BLCVoice requests keyboard control without unnecessary pointer/touchscreen permission.
 2. Portal denial or cancellation returns an actionable permission/capability result without crashing.
 3. After `RemoteDesktop.Start()` succeeds, BLCVoice connects through `ConnectToEIS()` and sends input exclusively through EIS for that session.
-4. A successful EIS session exposes the required text/input capability or BLCVoice reports the capability as unavailable.
+4. When `ei_text` is available, BLCVoice prefers the native EIS text path. When the compositor exposes only a resumed EIS keyboard device, the optional `xdgRemoteDesktopEisClipboard` path may use the native Wayland clipboard plus the authorized EIS keyboard session to issue the paste shortcut; if neither path is available, insertion must report unavailable rather than success.
 5. Turkish characters, emoji and text longer than 254 UTF-8 bytes are submitted without splitting a code point.
 6. Focus remains on the intended target application while text is submitted.
-7. Closing or revoking the portal session transitions subsequent insertion attempts to unavailable/failure.
-8. Restore-token behavior, if enabled, remains revocable and does not bypass portal policy.
-9. No X11, evdev, uinput or privileged fallback activates on failure.
+7. If `xdgRemoteDesktopEisClipboard` is selected, record that exact backend identity, verify the intended target visibly receives the complete transcript, and confirm that BLCVoice does not falsely claim clipboard contents were erased. The transcript may remain in the user's system clipboard or clipboard history and that privacy side effect must be visible in release/user documentation.
+8. Closing or revoking the portal session transitions subsequent insertion attempts to unavailable/failure.
+9. Restore-token behavior, if enabled, remains revocable and does not bypass portal policy.
+10. No X11, evdev, uinput or privileged fallback activates on failure.
 
 The XDG RemoteDesktop portal documents EIS as the recommended input mechanism. After an EIS connection is established, RemoteDesktop `Notify*` input methods must not be mixed with that session.
 
