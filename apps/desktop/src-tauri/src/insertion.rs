@@ -60,6 +60,12 @@ impl DesktopInsertionService {
     }
 
     pub fn capability(&self) -> Result<InsertionCapability, InsertionError> {
+        let state = self.lock_state();
+        if let Some(inserter) = state.inserter.as_ref() {
+            return Ok(inserter.capability());
+        }
+        drop(state);
+
         resolve_insertion_capability(self.environment).map_err(|error| {
             InsertionError::new(InsertionErrorKind::BackendUnavailable, error.to_string())
         })
@@ -101,7 +107,8 @@ impl DesktopInsertionService {
             }
             InsertionBackend::X11XTest => X11Inserter::connect(X11Options::default())
                 .map(|inserter| Box::new(inserter) as Box<dyn TextInserter>),
-            InsertionBackend::XdgRemoteDesktopEis => {
+            InsertionBackend::XdgRemoteDesktopEis
+            | InsertionBackend::XdgRemoteDesktopEisClipboard => {
                 let inserter = WaylandEisInserter::connect(WaylandEisOptions::new(
                     state.wayland_restore_token.clone(),
                 ))?;

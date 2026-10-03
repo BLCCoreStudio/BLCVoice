@@ -12,6 +12,7 @@ pub enum InsertionBackend {
     MacOsQuartz,
     X11XTest,
     XdgRemoteDesktopEis,
+    XdgRemoteDesktopEisClipboard,
 }
 
 impl fmt::Display for InsertionBackend {
@@ -21,6 +22,9 @@ impl fmt::Display for InsertionBackend {
             Self::MacOsQuartz => formatter.write_str("macOsQuartz"),
             Self::X11XTest => formatter.write_str("x11XTest"),
             Self::XdgRemoteDesktopEis => formatter.write_str("xdgRemoteDesktopEis"),
+            Self::XdgRemoteDesktopEisClipboard => {
+                formatter.write_str("xdgRemoteDesktopEisClipboard")
+            }
         }
     }
 }
@@ -269,6 +273,14 @@ mod tests {
         assert_eq!(
             capability.authorization(),
             InsertionAuthorization::XdgRemoteDesktop
+        );
+    }
+
+    #[test]
+    fn clipboard_eis_backend_has_an_explicit_identity() {
+        assert_eq!(
+            InsertionBackend::XdgRemoteDesktopEisClipboard.to_string(),
+            "xdgRemoteDesktopEisClipboard"
         );
     }
 
