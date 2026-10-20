@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BLCVoice app icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d1b2b"/>
+      <stop offset="1" stop-color="#12131b"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b3a7ff"/>
+      <stop offset="1" stop-color="#7868ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".38"/>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="48" y="48" width="416" height="416" rx="108" fill="url(#bg)" stroke="#7968ff" stroke-width="10"/>
+    <rect x="66" y="66" width="380" height="380" rx="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="3"/>
+  </g>
+  <g fill="url(#wave)" filter="url(#glow)">
+    <rect x="135" y="202" width="30" height="108" rx="15"/>
+    <rect x="189" y="172" width="32" height="168" rx="16"/>
+    <rect x="239" y="140" width="34" height="232" rx="17"/>
+    <rect x="291" y="172" width="32" height="168" rx="16"/>
+    <rect x="347" y="202" width="30" height="108" rx="15"/>
+  </g>
+  <circle cx="256" cy="386" r="8" fill="#56dfa6"/>
+</svg>
